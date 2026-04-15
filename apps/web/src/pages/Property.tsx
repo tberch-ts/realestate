@@ -25,9 +25,17 @@ export default function Property() {
   return (
     <div className="min-h-screen px-6 py-10">
       <div className="max-w-5xl mx-auto">
-        <Link to="/" className="text-sm text-indigo-400 hover:text-indigo-300">
-          ← New search
-        </Link>
+        <div className="flex items-center justify-between">
+          <Link to="/" className="text-sm text-indigo-400 hover:text-indigo-300">
+            ← New search
+          </Link>
+          <Link
+            to={`/deal?address=${encodeURIComponent(address)}`}
+            className="px-4 py-2 rounded bg-indigo-500 hover:bg-indigo-400 font-semibold text-white text-sm"
+          >
+            Create deal →
+          </Link>
+        </div>
         <h1 className="text-3xl font-bold mt-3 mb-1">{address}</h1>
         {snapshot?.geocode.status === 'ok' && (
           <p className="text-slate-400 text-sm mb-6">

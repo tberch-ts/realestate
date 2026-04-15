@@ -1,15 +1,22 @@
 import type {
+  AssetClass,
   BuyBoxCriterionResult,
   BuyBoxOutcome,
   BuyBoxResult,
   PropertySnapshot,
 } from '@mfa/shared';
 
+export interface BuyBoxDealInputs {
+  purchasePrice?: number;
+  leverCount?: number;
+  assetClass?: AssetClass;
+}
+
 // Pure scoring — takes a snapshot (minus buyBox itself) + optional deal inputs,
 // returns per-criterion outcomes and an overall 0-100 score.
 export function scoreBuyBox(
   snapshot: Omit<PropertySnapshot, 'buyBox'>,
-  inputs: { purchasePrice?: number; leverCount?: number } = {}
+  inputs: BuyBoxDealInputs = {}
 ): BuyBoxResult {
   const criteria: BuyBoxCriterionResult[] = [];
 
@@ -55,13 +62,20 @@ export function scoreBuyBox(
     note: price == null ? 'Enter purchase price on deal form.' : undefined,
   });
 
-  // ---- Asset class: checklist placeholder ----
+  // ---- Asset class (user-entered on deal form) ----
+  const ac = inputs.assetClass;
   criteria.push({
     criterion: 'assetClass',
     label: 'A or B asset class',
     target: 'A or B',
-    outcome: 'unknown',
-    note: 'Set manually on deal form (cannot be reliably inferred from public data).',
+    outcome:
+      ac === 'A' || ac === 'B'
+        ? 'pass'
+        : ac === 'C' || ac === 'D'
+        ? 'fail'
+        : 'unknown',
+    actual: ac && ac !== 'unknown' ? `Class ${ac}` : undefined,
+    note: ac ? undefined : 'Set on deal form.',
   });
 
   // ---- MSA population: 100k+ (county as proxy) ----

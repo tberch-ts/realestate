@@ -19,9 +19,9 @@ export interface GeocodedAddress {
   lng: number;
   placeId?: string;
   components?: Record<string, string>;
-  stateCode?: string; // 2-letter USPS (CO, TX, ...)
-  countyFips?: string; // 5-digit FIPS (state+county) once resolved by Census
-  msa?: string; // CBSA code once resolved
+  stateCode?: string;
+  countyFips?: string;
+  msa?: string;
 }
 
 export interface PropertySnapshot {
@@ -88,7 +88,7 @@ export interface BlsRecord {
 
 export interface CrimeRecord {
   jurisdiction?: string;
-  violentCrimeRate?: number; // per 100k
+  violentCrimeRate?: number;
   nationalAverageRate?: number;
   belowAverage?: boolean;
   year?: number;
@@ -96,7 +96,7 @@ export interface CrimeRecord {
 
 export interface LandlordRecord {
   stateCode: string;
-  stateScore: number; // 0-100
+  stateScore: number;
   stateTier: 'friendly' | 'moderate' | 'unfriendly';
   cityOverride?: { city: string; tier: 'friendly' | 'moderate' | 'unfriendly'; notes?: string };
   notes?: string;
@@ -128,38 +128,98 @@ export interface BuyBoxCriterionResult {
 }
 
 export interface BuyBoxResult {
-  score: number; // 0-100
+  score: number;
   outcome: BuyBoxOutcome;
   criteria: BuyBoxCriterionResult[];
   whyPursue: string[];
   whyPass: string[];
 }
 
-// Underwriting (Phase 3)
+// ---------- Deals & Underwriting ----------
+
+export type AssetClass = 'A' | 'B' | 'C' | 'D' | 'unknown';
+
+export const VALUE_ADD_LEVERS = [
+  'unit_renovation',
+  'exterior_common_area',
+  'rubs_utility_billback',
+  'below_market_rents',
+  'operational_efficiency',
+  'premium_amenities',
+  'reposition',
+  'tax_appeal',
+  'refinance_at_stabilization',
+] as const;
+export type ValueAddLever = (typeof VALUE_ADD_LEVERS)[number];
+
+export const VALUE_ADD_LEVER_LABELS: Record<ValueAddLever, string> = {
+  unit_renovation: 'Unit interior renovation',
+  exterior_common_area: 'Exterior / common area upgrade',
+  rubs_utility_billback: 'RUBS / utility bill-back',
+  below_market_rents: 'Below-market rents (loss-to-lease)',
+  operational_efficiency: 'Operational inefficiency',
+  premium_amenities: 'Premium amenities (parking, storage, pet, laundry)',
+  reposition: 'Asset-class reposition',
+  tax_appeal: 'Property-tax appeal',
+  refinance_at_stabilization: 'Refinance at stabilization',
+};
+
 export interface UnderwritingInput {
   purchasePrice: number;
   units: number;
-  currentGrossRent: number;
-  marketGrossRent?: number;
+  currentGrossRent: number; // annual $
+  marketGrossRent?: number; // annual $
   vacancyPct: number;
-  opexPct: number;
+  opexPct: number; // % of EGI
   loan: {
-    ltv: number;
-    ratePct: number;
+    ltv: number; // 0-1
+    ratePct: number; // annual %
     amortYears: number;
     ioYears?: number;
   };
   rehabBudget?: number;
-  closingCostsPct?: number;
+  closingCostsPct?: number; // % of purchase price, default 2
 }
 
 export interface UnderwritingOutput {
   grossScheduledRent: number;
   effectiveGrossIncome: number;
+  operatingExpenses: number;
   netOperatingIncome: number;
   capRatePct: number;
+  loanAmount: number;
+  equityRequired: number;
+  monthlyDebtService: number;
+  annualDebtService: number;
+  cashFlow: number;
   dscr: number;
   cashOnCashPct: number;
   breakEvenOccupancyPct: number;
-  annualDebtService: number;
+  pricePerUnit: number;
+  lossToLeasePct?: number;
+}
+
+export interface DealInput {
+  propertyId?: number;
+  address: string;
+  name?: string;
+  assetClass?: AssetClass;
+  levers?: ValueAddLever[];
+  notes?: string;
+  underwriting: UnderwritingInput;
+}
+
+export interface DealRecord {
+  id: number;
+  propertyId: number;
+  address: string;
+  name?: string;
+  assetClass?: AssetClass;
+  levers: ValueAddLever[];
+  notes?: string;
+  status: string;
+  underwriting: UnderwritingInput;
+  underwritingOutput: UnderwritingOutput;
+  createdAt: string;
+  updatedAt: string;
 }

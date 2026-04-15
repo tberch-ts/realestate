@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 export default function Home() {
   const nav = useNavigate();
@@ -34,8 +34,16 @@ export default function Home() {
             Analyze
           </button>
         </form>
-        <p className="text-xs text-slate-500 mt-4">
-          v0.1 · Phase 1 — address search scaffolding
+        <div className="flex gap-4 text-sm text-slate-400 mt-6">
+          <Link to="/deals" className="hover:text-indigo-300 underline">
+            Saved deals →
+          </Link>
+          <Link to="/deal" className="hover:text-indigo-300 underline">
+            New blank deal →
+          </Link>
+        </div>
+        <p className="text-xs text-slate-500 mt-8">
+          v0.3 · Phase 3 — underwriting + saved deals
         </p>
       </div>
     </div>
