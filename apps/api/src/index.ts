@@ -1,4 +1,10 @@
-import 'dotenv/config';
+import { config as loadEnv } from 'dotenv';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+// Load .env from repo root (monorepo) regardless of npm workspace cwd
+const __dirname = dirname(fileURLToPath(import.meta.url));
+loadEnv({ path: join(__dirname, '../../../.env') });
+
 import express from 'express';
 import cors from 'cors';
 import { geocodeRouter } from './routes/geocode.js';

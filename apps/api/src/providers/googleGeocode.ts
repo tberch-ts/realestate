@@ -44,8 +44,12 @@ export async function geocodeAddress(address: string): Promise<ProviderResult<Ge
 
     const r = body.results[0];
     const components: Record<string, string> = {};
+    let stateCode: string | undefined;
     for (const c of r.address_components) {
-      for (const t of c.types) components[t] = c.long_name;
+      for (const t of c.types) {
+        components[t] = c.long_name;
+        if (t === 'administrative_area_level_1') stateCode = c.short_name;
+      }
     }
 
     return {
@@ -57,6 +61,7 @@ export async function geocodeAddress(address: string): Promise<ProviderResult<Ge
         lng: r.geometry.location.lng,
         placeId: r.place_id,
         components,
+        stateCode,
       },
       fetchedAt: new Date().toISOString(),
     };
