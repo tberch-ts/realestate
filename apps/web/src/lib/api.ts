@@ -1,6 +1,7 @@
 import type {
   DealInput,
   DealRecord,
+  LoiInput,
   PropertySnapshot,
   UnderwritingInput,
   UnderwritingOutput,
@@ -57,4 +58,28 @@ export async function fetchDeal(id: number): Promise<DealRecord> {
   const res = await fetch(`${BASE}/api/deals/${id}`);
   if (!res.ok) throw new Error(`API ${res.status}`);
   return res.json();
+}
+
+export async function downloadLoi(deal: DealInput, loi: LoiInput): Promise<void> {
+  const res = await fetch(`${BASE}/api/loi`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ deal, loi }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`LOI ${res.status}: ${text}`);
+  }
+  const blob = await res.blob();
+  const cd = res.headers.get('content-disposition') ?? '';
+  const match = cd.match(/filename="([^"]+)"/);
+  const filename = match?.[1] ?? 'LOI.pdf';
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }

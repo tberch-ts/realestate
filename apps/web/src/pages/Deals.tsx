@@ -62,6 +62,7 @@ export default function Deals() {
                   <th className="text-right py-2 px-3">Class</th>
                   <th className="text-right py-2 px-3">Levers</th>
                   <th className="text-right py-2 px-3">Updated</th>
+                  <th className="text-right py-2 px-3"></th>
                 </tr>
               </thead>
               <tbody>
@@ -84,6 +85,14 @@ export default function Deals() {
                     <td className="text-right py-2 px-3">{d.levers?.length ?? 0}</td>
                     <td className="text-right py-2 px-3 text-slate-500 text-xs">
                       {new Date(d.updatedAt).toLocaleDateString()}
+                    </td>
+                    <td className="text-right py-2 px-3">
+                      <Link
+                        to={`/loi?dealId=${d.id}`}
+                        className="text-indigo-400 hover:text-indigo-300 text-xs"
+                      >
+                        LOI →
+                      </Link>
                     </td>
                   </tr>
                 ))}

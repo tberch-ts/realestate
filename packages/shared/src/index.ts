@@ -223,3 +223,40 @@ export interface DealRecord {
   createdAt: string;
   updatedAt: string;
 }
+
+// ---------- Letter of Intent ----------
+
+export interface LoiInput {
+  // Parties
+  buyerEntity: string;          // "Acme Multifamily LLC"
+  buyerContact?: string;        // "Tom Berchenbriter"
+  buyerAddress?: string;
+  buyerEmail?: string;
+  buyerPhone?: string;
+  sellerEntity: string;
+  sellerContact?: string;
+  sellerAddress?: string;
+
+  // Deal terms
+  effectiveDate: string;        // ISO date
+  expirationDate: string;       // offer valid until
+  closingDays: number;          // days to close after inspection
+  inspectionDays: number;       // due diligence period
+  financingDays?: number;       // 0 if waived
+  earnestMoney: number;         // initial deposit
+  additionalDeposit?: number;   // released after DD
+  earnestMoneyRefundable: boolean;
+
+  // Contingencies & rights
+  assignmentRights: boolean;
+  financingContingency: boolean;
+  inspectionContingency: boolean;
+  titleReviewDays: number;
+
+  // Due diligence materials requested
+  ddMaterials: string[];        // list of items to request
+
+  // Special provisions / additional notes
+  specialTerms?: string;
+  brokerFee?: string;           // e.g. "2% to Seller's broker"
+}

@@ -11,6 +11,7 @@ import { geocodeRouter } from './routes/geocode.js';
 import { propertyRouter } from './routes/property.js';
 import { providersRouter } from './routes/providers.js';
 import { dealsRouter } from './routes/deals.js';
+import { loiRouter } from './routes/loi.js';
 
 const app = express();
 app.use(cors());
@@ -24,6 +25,7 @@ app.use('/api/geocode', geocodeRouter);
 app.use('/api/property', propertyRouter);
 app.use('/api/providers', providersRouter);
 app.use('/api/deals', dealsRouter);
+app.use('/api/loi', loiRouter);
 
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('[api] unhandled error:', err);

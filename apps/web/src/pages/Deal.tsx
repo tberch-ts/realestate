@@ -116,12 +116,20 @@ export default function Deal() {
         {saved && (
           <div className="mb-4 p-3 rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-200 text-sm flex justify-between items-center">
             <span>Saved deal #{saved.id}.</span>
-            <button
-              onClick={() => nav('/deals')}
-              className="underline hover:text-emerald-100"
-            >
-              View all deals →
-            </button>
+            <div className="flex gap-4">
+              <button
+                onClick={() => nav(`/loi?dealId=${saved.id}`)}
+                className="underline hover:text-emerald-100"
+              >
+                Generate LOI →
+              </button>
+              <button
+                onClick={() => nav('/deals')}
+                className="underline hover:text-emerald-100"
+              >
+                View all deals →
+              </button>
+            </div>
           </div>
         )}
 
