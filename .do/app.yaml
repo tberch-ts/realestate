@@ -21,11 +21,15 @@ services:
       repo: tberch-ts/realestate
       branch: main
       deploy_on_push: true
-    http_port: 4000
+    # No http_port here — api is internal-only. internal_ports lets the web
+    # service reach it via `api:4000` without DO synthesizing a public route.
+    internal_ports:
+      - 4000
     instance_size_slug: basic-xs
     instance_count: 1
     health_check:
       http_path: /health
+      port: 4000
       initial_delay_seconds: 20
       period_seconds: 10
       failure_threshold: 3
@@ -75,14 +79,6 @@ jobs:
     envs:
       - { key: NODE_ENV, value: production, scope: RUN_TIME }
       - { key: DATABASE_URL, value: "${mfa-db.DATABASE_URL}", scope: RUN_TIME }
-
-ingress:
-  rules:
-    - match:
-        path:
-          prefix: /
-      component:
-        name: web
 
 domains:
   - domain: re.talkstud.io
