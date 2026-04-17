@@ -55,8 +55,6 @@ services:
     http_port: 80
     instance_size_slug: basic-xs
     instance_count: 1
-    routes:
-      - path: /
     envs:
       - { key: API_URL, value: "/api", scope: RUN_TIME }
       - { key: GOOGLE_MAPS_API_KEY, scope: RUN_TIME, type: SECRET }
@@ -77,6 +75,14 @@ jobs:
     envs:
       - { key: NODE_ENV, value: production, scope: RUN_TIME }
       - { key: DATABASE_URL, value: "${mfa-db.DATABASE_URL}", scope: RUN_TIME }
+
+ingress:
+  rules:
+    - match:
+        path:
+          prefix: /
+      component:
+        name: web
 
 domains:
   - domain: re.talkstud.io
