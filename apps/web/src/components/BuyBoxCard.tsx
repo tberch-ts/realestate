@@ -23,9 +23,21 @@ export default function BuyBoxCard({ buyBox }: { buyBox: BuyBoxResult }) {
           <h2 className="text-xs font-semibold tracking-wider text-slate-400">BUY BOX</h2>
           <p className={`text-2xl font-bold ${banner.text}`}>{banner.label}</p>
         </div>
-        <div className="text-right">
-          <div className="text-xs text-slate-400">Score</div>
-          <div className="text-4xl font-bold text-slate-100">{buyBox.score}</div>
+        <div className="text-right flex gap-6">
+          <div>
+            <div className="text-xs text-slate-400">Market</div>
+            <div className={`text-3xl font-bold ${scoreColor(buyBox.marketScore)}`}>
+              {buyBox.marketScore}
+            </div>
+            <div className="text-[10px] text-slate-500">public data only</div>
+          </div>
+          <div>
+            <div className="text-xs text-slate-400">Full</div>
+            <div className={`text-3xl font-bold ${scoreColor(buyBox.fullScore)}`}>
+              {buyBox.fullScore}
+            </div>
+            <div className="text-[10px] text-slate-500">with deal form</div>
+          </div>
         </div>
       </div>
 
@@ -67,4 +79,12 @@ export default function BuyBoxCard({ buyBox }: { buyBox: BuyBoxResult }) {
       )}
     </section>
   );
+}
+
+function scoreColor(score: number): string {
+  if (score >= 90) return 'text-emerald-300';
+  if (score >= 80) return 'text-lime-300';
+  if (score >= 60) return 'text-amber-200';
+  if (score >= 40) return 'text-orange-300';
+  return 'text-rose-300';
 }

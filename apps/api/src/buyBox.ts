@@ -163,16 +163,23 @@ export function scoreBuyBox(
   return summarize(criteria);
 }
 
+// Criteria that come from public data (can score without user input).
+const MARKET_CRITERIA = new Set([
+  'msaPopulation',
+  'populationGrowth',
+  'jobGrowth',
+  'crime',
+  'landlordFriendly',
+  'unitCount',
+  'vintage',
+]);
+
+// Criteria that require user input on the deal form.
+const DEAL_FORM_CRITERIA = new Set(['dealSize', 'assetClass', 'valueAddLevers']);
+
 function summarize(criteria: BuyBoxCriterionResult[]): BuyBoxResult {
-  // Score: pass=1, borderline=0.5, fail=0, unknown=0.5 (neutral)
-  const weights: Record<BuyBoxOutcome, number> = {
-    pass: 1,
-    borderline: 0.5,
-    fail: 0,
-    unknown: 0.5,
-  };
-  const total = criteria.reduce((sum, c) => sum + weights[c.outcome], 0);
-  const score = Math.round((total / criteria.length) * 100);
+  const marketScore = computeScore(criteria.filter((c) => MARKET_CRITERIA.has(c.criterion)));
+  const fullScore = computeScore(criteria);
 
   const whyPursue = criteria
     .filter((c) => c.outcome === 'pass')
@@ -181,15 +188,42 @@ function summarize(criteria: BuyBoxCriterionResult[]): BuyBoxResult {
     .filter((c) => c.outcome === 'fail')
     .map((c) => `${c.label}${c.actual ? ` — ${c.actual}` : ''} vs target ${c.target}`);
 
+  // Outcome is driven by the better of the two scores so a great market
+  // doesn't get tagged PASS just because the deal form is empty.
+  const headlineScore = Math.max(marketScore, fullScore);
   let outcome: BuyBoxOutcome = 'unknown';
   const failCount = criteria.filter((c) => c.outcome === 'fail').length;
-  const passCount = criteria.filter((c) => c.outcome === 'pass').length;
   if (failCount >= 2) outcome = 'fail';
+  else if (headlineScore >= 90) outcome = 'pass';
+  else if (headlineScore >= 70) outcome = 'borderline';
   else if (failCount === 1) outcome = 'borderline';
-  else if (passCount >= 5) outcome = 'pass';
   else outcome = 'borderline';
 
-  return { score, outcome, criteria, whyPursue, whyPass };
+  return {
+    score: headlineScore,
+    marketScore,
+    fullScore,
+    outcome,
+    criteria,
+    whyPursue,
+    whyPass,
+  };
+}
+
+// Score = % of "resolved" criteria that pass (pass=1, borderline=0.5, fail=0).
+// Unknowns are excluded from the denominator, so filling out more data raises confidence
+// rather than dragging the score toward 50.
+function computeScore(criteria: BuyBoxCriterionResult[]): number {
+  const weights: Record<BuyBoxOutcome, number> = {
+    pass: 1,
+    borderline: 0.5,
+    fail: 0,
+    unknown: 0,
+  };
+  const resolved = criteria.filter((c) => c.outcome !== 'unknown');
+  if (resolved.length === 0) return 0;
+  const total = resolved.reduce((sum, c) => sum + weights[c.outcome], 0);
+  return Math.round((total / resolved.length) * 100);
 }
 
 function fmtMoney(n: number): string {

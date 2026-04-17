@@ -102,15 +102,18 @@ async function fetchAcsRow(args: {
   scope: string;
   in: string;
 }): Promise<string[] | null> {
-  const url = new URL(ACS_URL(args.year));
-  url.searchParams.set('get', args.vars.join(','));
-  url.searchParams.set('for', args.scope);
-  url.searchParams.set('in', args.in);
-  const res = await fetch(url);
+  // Census rejects `+`-encoded spaces in the `in` param (takes ~15s to time out).
+  // Hand-build the query so spaces become %20.
+  const inSafe = args.in.replace(/ /g, '%20');
+  const qs =
+    `get=${encodeURIComponent(args.vars.join(','))}` +
+    `&for=${encodeURIComponent(args.scope)}` +
+    `&in=${inSafe}` +
+    (process.env.CENSUS_API_KEY ? `&key=${encodeURIComponent(process.env.CENSUS_API_KEY)}` : '');
+  const res = await fetch(`${ACS_URL(args.year)}?${qs}`);
   if (!res.ok) return null;
   const body = (await res.json()) as string[][];
   if (!body || body.length < 2) return null;
-  // First row of data (index 1), slice to just the variable values
   return body[1].slice(0, args.vars.length);
 }
 

@@ -12,6 +12,8 @@ import { propertyRouter } from './routes/property.js';
 import { providersRouter } from './routes/providers.js';
 import { dealsRouter } from './routes/deals.js';
 import { loiRouter } from './routes/loi.js';
+import { hotspotsRouter } from './routes/hotspots.js';
+import { warmDenverHotspots } from './providers/denverNeighborhoods.js';
 
 const app = express();
 app.use(cors());
@@ -26,6 +28,7 @@ app.use('/api/property', propertyRouter);
 app.use('/api/providers', providersRouter);
 app.use('/api/deals', dealsRouter);
 app.use('/api/loi', loiRouter);
+app.use('/api/hotspots', hotspotsRouter);
 
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('[api] unhandled error:', err);
@@ -35,4 +38,6 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 const port = Number(process.env.API_PORT ?? 4000);
 app.listen(port, () => {
   console.log(`[api] listening on :${port}`);
+  // Warm Denver hotspots in background so first user request is served from cache.
+  setTimeout(() => warmDenverHotspots(), 500);
 });

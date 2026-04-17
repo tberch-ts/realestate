@@ -128,7 +128,9 @@ export interface BuyBoxCriterionResult {
 }
 
 export interface BuyBoxResult {
-  score: number;
+  score: number;        // headline = max(marketScore, fullScore)
+  marketScore: number;  // public-data criteria only — computable without deal form
+  fullScore: number;    // all criteria including deal-form inputs
   outcome: BuyBoxOutcome;
   criteria: BuyBoxCriterionResult[];
   whyPursue: string[];
