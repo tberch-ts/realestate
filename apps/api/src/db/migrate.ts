@@ -19,14 +19,27 @@ async function main() {
   console.log('[migrate] context:', who.rows[0]);
   const grants = await pool.query(
     `SELECT has_database_privilege(current_user, current_database(), 'CREATE') AS can_create_db,
-            has_schema_privilege(current_user, 'public', 'CREATE') AS can_create_public`
+            has_database_privilege(current_user, current_database(), 'CONNECT') AS can_connect_db,
+            has_schema_privilege(current_user, 'public', 'CREATE') AS can_create_public,
+            has_schema_privilege(current_user, 'public', 'USAGE') AS can_use_public,
+            (SELECT datdba::regrole::text FROM pg_database WHERE datname = current_database()) AS db_owner,
+            (SELECT nspowner::regrole::text FROM pg_namespace WHERE nspname = 'public') AS public_owner`
   );
   console.log('[migrate] grants:', grants.rows[0]);
+  const dbs = await pool.query(
+    `SELECT datname, datdba::regrole::text AS owner FROM pg_database WHERE datallowconn ORDER BY datname`
+  );
+  console.log('[migrate] databases visible:', dbs.rows);
+  const memberships = await pool.query(
+    `SELECT r.rolname FROM pg_roles r WHERE pg_has_role(current_user, r.oid, 'MEMBER')`
+  );
+  console.log('[migrate] roles:', memberships.rows.map(r => r.rolname).join(','));
 
-  // PG 15+ + DO managed PG: the app user doesn't own the public schema, so CREATE
-  // TABLE in public fails. Create our own `app` schema (which we own) and route
-  // unqualified migration DDL into it via search_path. Runtime queries do the same
-  // via the search_path option set in pool.ts.
+  // Bail out before running CREATE — we just want the diagnostic this round.
+  console.log('[migrate] DIAGNOSTIC ONLY — exiting before applying migrations');
+  await pool.end();
+  return;
+  // unreachable below — left to keep the build happy
   await pool.query('CREATE SCHEMA IF NOT EXISTS app');
 
   const files = readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
