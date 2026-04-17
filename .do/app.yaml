@@ -31,13 +31,11 @@ services:
       initial_delay_seconds: 20
       period_seconds: 10
       failure_threshold: 3
-    # Persistent cache volume (~1 GiB, ~$1/mo). If App Platform rejects this field
-    # for the chosen instance size, drop the whole `disk` block — the app still runs,
-    # but the Denver hotspot/portfolio warm cache is lost on each deploy.
-    disk:
-      name: api-cache
-      mount_path: /app/apps/api/.cache
-      size_gib: 1
+    # NOTE: persistent disks aren't accepted at the service level on basic-xs
+    # (App Platform rejects `disk:` here). The Denver warm cache lives in
+    # /app/apps/api/.cache and is rebuilt at startup (~90s of cold latency
+    # right after each deploy). To get persistence, upgrade to a professional
+    # instance size or move the cache to Spaces.
     envs:
       - { key: NODE_ENV, value: production, scope: RUN_TIME }
       - { key: API_PORT, value: "4000", scope: RUN_TIME }
