@@ -7,6 +7,7 @@ loadEnv({ path: join(__dirname, '../../../.env') });
 
 import express from 'express';
 import cors from 'cors';
+import { basicAuth } from './middleware/basicAuth.js';
 import { geocodeRouter } from './routes/geocode.js';
 import { propertyRouter } from './routes/property.js';
 import { providersRouter } from './routes/providers.js';
@@ -27,6 +28,8 @@ app.use(express.json({ limit: '1mb' }));
 app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'mfa-api', ts: new Date().toISOString() });
 });
+
+app.use(basicAuth);
 
 app.use('/api/geocode', geocodeRouter);
 app.use('/api/property', propertyRouter);

@@ -1,0 +1,58 @@
+# Local mirror of the App Platform prod topology.
+# Run:
+#   docker compose -f docker-compose.prod.yml up --build
+# Then visit http://localhost:8080 and sign in with BASIC_AUTH_USER / BASIC_AUTH_PASS.
+#
+# This is NOT wired to hot-reload — it's a smoke test for the prod Dockerfiles.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mfa
+      POSTGRES_PASSWORD: mfa
+      POSTGRES_DB: mfa
+    volumes:
+      - mfa_pg_data_prod:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mfa -d mfa"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.api.prod
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      API_PORT: 4000
+      DATABASE_URL: postgres://mfa:mfa@db:5432/mfa
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
+      CENSUS_API_KEY: ${CENSUS_API_KEY:-}
+      BASIC_AUTH_USER: ${BASIC_AUTH_USER:-mfa}
+      BASIC_AUTH_PASS: ${BASIC_AUTH_PASS:-Sunrise-Crane-Altitude-8421}
+    volumes:
+      - mfa_api_cache:/app/apps/api/.cache
+
+  web:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.web.prod
+    depends_on:
+      - api
+    environment:
+      API_URL: /api
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
+      BASIC_AUTH_USER: ${BASIC_AUTH_USER:-mfa}
+      BASIC_AUTH_PASS: ${BASIC_AUTH_PASS:-Sunrise-Crane-Altitude-8421}
+    ports:
+      - "8080:80"
+
+volumes:
+  mfa_pg_data_prod:
+  mfa_api_cache:

@@ -10,7 +10,7 @@ Targeting **Denver metro** for v1.
 - **API:** Node + Express + TypeScript
 - **DB:** PostgreSQL
 - **Local:** Docker Compose
-- **Prod (later):** DigitalOcean Kubernetes
+- **Prod:** DigitalOcean App Platform (see [docs/DEPLOY.md](docs/DEPLOY.md))
 
 ## Getting started
 
@@ -58,5 +58,5 @@ infra/             deployment configs
 - **Phase 3** Underwriting calculator + save-deal + deals list
 - **Phase 4** LOI PDF generator
 - **Phase 5** Paid provider stubs (ATTOM, RentCast)
-- **Phase 6** Dockerfile + k8s manifests for DigitalOcean
+- **Phase 6** ✓ deploy to DigitalOcean App Platform at `re.talkstud.io` (basic-auth gated)
 - **v2** CRM for brokers/investors, partner directory, capital-raise tooling, auth

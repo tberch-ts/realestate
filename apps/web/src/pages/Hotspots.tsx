@@ -3,9 +3,7 @@ import { Link } from 'react-router-dom';
 import type { FollowupResult, FollowupScored } from '@mfa/shared';
 import { fetchFollowup } from '../lib/api';
 import { loadGoogleMaps } from '../lib/googleMaps';
-
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000';
-const MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
+import { API_URL as API_BASE, GOOGLE_MAPS_API_KEY as MAPS_KEY } from '../lib/runtimeEnv';
 
 const DENVER_CENTER = { lat: 39.7392, lng: -104.9903 };
 
@@ -31,7 +29,7 @@ export default function Hotspots() {
     async function init() {
       if (!MAPS_KEY) {
         setError(
-          'Missing VITE_GOOGLE_MAPS_API_KEY in .env. Add it and restart the web dev server.'
+          'Missing Google Maps API key. Set VITE_GOOGLE_MAPS_API_KEY (dev) or GOOGLE_MAPS_API_KEY on the web container (prod).'
         );
         setStatus('error');
         return;

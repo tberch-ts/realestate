@@ -13,7 +13,7 @@ import type {
   UnderwritingOutput,
 } from '@mfa/shared';
 
-const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000';
+import { API_URL as BASE } from './runtimeEnv';
 
 // ---- LOI drafts ----
 
