@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import type { FollowupResult, FollowupScored } from '@mfa/shared';
+import { fetchFollowup } from '../lib/api';
 import { loadGoogleMaps } from '../lib/googleMaps';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000';
@@ -19,6 +21,9 @@ export default function Hotspots() {
     population?: number;
     rentBurdenedPct?: number;
   } | null>(null);
+  const [followup, setFollowup] = useState<FollowupResult | null>(null);
+  const [followupLoading, setFollowupLoading] = useState(false);
+  const [followupError, setFollowupError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,6 +101,31 @@ export default function Hotspots() {
     };
   }, []);
 
+  // Load follow-up candidates when a zone is selected.
+  useEffect(() => {
+    if (!selected) {
+      setFollowup(null);
+      setFollowupError(null);
+      return;
+    }
+    let cancelled = false;
+    setFollowupLoading(true);
+    setFollowupError(null);
+    fetchFollowup(selected.name, { limit: 5 })
+      .then((r) => {
+        if (!cancelled) setFollowup(r);
+      })
+      .catch((e: Error) => {
+        if (!cancelled) setFollowupError(e.message);
+      })
+      .finally(() => {
+        if (!cancelled) setFollowupLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected?.name]);
+
   return (
     <div className="min-h-screen px-6 py-6">
       <div className="max-w-7xl mx-auto">
@@ -155,6 +185,14 @@ export default function Hotspots() {
                 </Link>
               </div>
             )}
+            {selected && (
+              <FollowupPanel
+                zone={selected.name}
+                loading={followupLoading}
+                error={followupError}
+                result={followup}
+              />
+            )}
             {!selected && status === 'ready' && (
               <div className="p-4 rounded border border-slate-800 bg-slate-900/40 text-slate-400 text-sm">
                 Click a neighborhood polygon to see details.
@@ -186,6 +224,79 @@ function Legend() {
         </div>
       ))}
     </div>
+  );
+}
+
+function FollowupPanel({
+  zone,
+  loading,
+  error,
+  result,
+}: {
+  zone: string;
+  loading: boolean;
+  error: string | null;
+  result: FollowupResult | null;
+}) {
+  return (
+    <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60">
+      <div className="flex items-baseline justify-between mb-3">
+        <h4 className="text-sm font-semibold text-slate-100">Follow-up candidates</h4>
+        {result && (
+          <Link to={`/followup?zone=${encodeURIComponent(zone)}`} className="text-xs text-indigo-400 hover:text-indigo-300">
+            See all {result.count} →
+          </Link>
+        )}
+      </div>
+      {loading && <p className="text-sm text-slate-400">Querying Denver parcels…</p>}
+      {error && <p className="text-sm text-rose-400">{error}</p>}
+      {result && result.count === 0 && (
+        <p className="text-sm text-slate-500">
+          No 100+ unit, 1990+ buildings in this zone. Try loosening minUnits on the full list.
+        </p>
+      )}
+      {result && result.candidates.length > 0 && (
+        <ul className="space-y-2">
+          {result.candidates.map((c) => (
+            <FollowupRow key={c.parcelId ?? c.address} c={c} />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function FollowupRow({ c }: { c: FollowupScored }) {
+  return (
+    <li className="p-2 rounded border border-slate-800/60 bg-slate-950/40 hover:bg-slate-900/70">
+      <Link
+        to={`/property?address=${encodeURIComponent(c.address + ', Denver, CO')}`}
+        className="block"
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="text-sm text-slate-100 truncate" title={c.address}>
+              {c.address}
+            </div>
+            <div className="text-xs text-slate-500 truncate" title={c.owner}>
+              {c.owner ?? '—'}
+            </div>
+          </div>
+          <div className={`text-xl font-bold ${scoreTextColor(c.score)}`}>{c.score}</div>
+        </div>
+        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-slate-400">
+          {c.units != null && <span>{c.units} units</span>}
+          {c.yearBuilt != null && <span>built {c.yearBuilt}</span>}
+          {c.signals.yearsHeld != null && <span>{c.signals.yearsHeld}y held</span>}
+          {c.signals.outOfStateOwner && <span className="text-amber-300">out-of-state</span>}
+        </div>
+        {c.reasons.length > 0 && (
+          <div className="mt-1 text-xs text-slate-500 italic truncate">
+            {c.reasons.join(' · ')}
+          </div>
+        )}
+      </Link>
+    </li>
   );
 }
 

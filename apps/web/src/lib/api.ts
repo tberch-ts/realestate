@@ -1,6 +1,7 @@
 import type {
   DealInput,
   DealRecord,
+  FollowupResult,
   LoiInput,
   PropertySnapshot,
   UnderwritingInput,
@@ -8,6 +9,24 @@ import type {
 } from '@mfa/shared';
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000';
+
+export async function fetchFollowup(
+  zone: string,
+  opts: { minUnits?: number; minYear?: number; limit?: number } = {}
+): Promise<FollowupResult> {
+  const url = new URL(`${BASE}/api/followup/denver`);
+  url.searchParams.set('zone', zone);
+  if (opts.minUnits) url.searchParams.set('minUnits', String(opts.minUnits));
+  if (opts.minYear) url.searchParams.set('minYear', String(opts.minYear));
+  if (opts.limit) url.searchParams.set('limit', String(opts.limit));
+  const res = await fetch(url);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`API ${res.status}: ${text.slice(0, 120)}`);
+  }
+  const body = await res.json();
+  return body.data as FollowupResult;
+}
 
 export async function fetchProperty(address: string): Promise<PropertySnapshot> {
   const url = new URL(`${BASE}/api/property`);

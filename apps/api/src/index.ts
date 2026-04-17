@@ -13,6 +13,7 @@ import { providersRouter } from './routes/providers.js';
 import { dealsRouter } from './routes/deals.js';
 import { loiRouter } from './routes/loi.js';
 import { hotspotsRouter } from './routes/hotspots.js';
+import { followupRouter } from './routes/followup.js';
 import { warmDenverHotspots } from './providers/denverNeighborhoods.js';
 
 const app = express();
@@ -29,6 +30,7 @@ app.use('/api/providers', providersRouter);
 app.use('/api/deals', dealsRouter);
 app.use('/api/loi', loiRouter);
 app.use('/api/hotspots', hotspotsRouter);
+app.use('/api/followup', followupRouter);
 
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('[api] unhandled error:', err);

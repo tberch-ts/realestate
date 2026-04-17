@@ -262,3 +262,37 @@ export interface LoiInput {
   specialTerms?: string;
   brokerFee?: string;           // e.g. "2% to Seller's broker"
 }
+
+// ---------- Follow-up prospects ----------
+
+export type OwnerType = 'individual' | 'llc' | 'institutional' | 'unknown';
+
+export interface FollowupProperty {
+  parcelId?: string;            // SITUS_ADDRESS_ID or similar
+  address: string;
+  owner?: string;
+  ownerMailingState?: string;   // out-of-state owner = another contact signal
+  units?: number;
+  yearBuilt?: number;
+  salePrice?: number;
+  saleDate?: string;            // ISO
+  sqft?: number;
+  propertyClass?: string;
+  centroid: [number, number];   // [lng, lat]
+}
+
+export interface FollowupScored extends FollowupProperty {
+  score: number;                // 0-100 composite priority
+  signals: {
+    yearsHeld?: number;
+    ownerType: OwnerType;
+    outOfStateOwner?: boolean;
+  };
+  reasons: string[];             // short human-readable reasons
+}
+
+export interface FollowupResult {
+  zone: string;
+  count: number;
+  candidates: FollowupScored[];
+}

@@ -8,6 +8,7 @@ import Deal from './pages/Deal';
 import Deals from './pages/Deals';
 import Loi from './pages/Loi';
 import Hotspots from './pages/Hotspots';
+import Followup from './pages/Followup';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
@@ -19,6 +20,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <Route path="/deals" element={<Deals />} />
         <Route path="/loi" element={<Loi />} />
         <Route path="/hotspots" element={<Hotspots />} />
+        <Route path="/followup" element={<Followup />} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>
