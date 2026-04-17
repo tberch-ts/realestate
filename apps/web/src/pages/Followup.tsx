@@ -158,7 +158,17 @@ function Row({ c }: { c: FollowupScored }) {
         )}
       </td>
       <td className="py-2 px-3 text-slate-300 align-top">
-        <div>{c.owner ?? '—'}</div>
+        {c.owner ? (
+          <Link
+            to={`/owner?name=${encodeURIComponent(c.owner)}`}
+            className="hover:text-indigo-300"
+            title="See all properties by this owner"
+          >
+            {c.owner}
+          </Link>
+        ) : (
+          '—'
+        )}
         <OwnerBadge ownerType={c.signals.ownerType} outOfState={c.signals.outOfStateOwner} state={c.ownerMailingState} />
       </td>
       <td className="py-2 px-3 text-right text-slate-200 align-top">{c.units ?? '—'}</td>

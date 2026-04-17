@@ -6,7 +6,9 @@ import type {
   LoiDraftCreate,
   LoiDraftPatch,
   LoiInput,
+  OwnerCluster,
   PropertySnapshot,
+  SosEntity,
   UnderwritingInput,
   UnderwritingOutput,
 } from '@mfa/shared';
@@ -51,6 +53,41 @@ export async function listDrafts(status: 'draft' | 'sent' | 'archived' | 'all' =
 export async function deleteDraft(id: number): Promise<void> {
   const res = await fetch(`${BASE}/api/loi/drafts/${id}`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`delete draft: ${res.status}`);
+}
+
+// ---- Portfolio (city-wide ownership) ----
+
+export async function fetchOwners(opts: {
+  outOfState?: boolean;
+  search?: string;
+  limit?: number;
+} = {}): Promise<OwnerCluster[]> {
+  const url = new URL(`${BASE}/api/portfolio/denver/owners`);
+  if (opts.outOfState) url.searchParams.set('outOfState', '1');
+  if (opts.search) url.searchParams.set('search', opts.search);
+  if (opts.limit) url.searchParams.set('limit', String(opts.limit));
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  const body = await res.json();
+  return body.data.clusters as OwnerCluster[];
+}
+
+export async function fetchOwner(name: string): Promise<OwnerCluster> {
+  const url = new URL(`${BASE}/api/portfolio/denver/owner`);
+  url.searchParams.set('name', name);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  const body = await res.json();
+  return body.data as OwnerCluster;
+}
+
+export async function fetchSosEntity(name: string): Promise<SosEntity | null> {
+  const url = new URL(`${BASE}/api/sos/entity`);
+  url.searchParams.set('name', name);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  const body = await res.json();
+  return body.data as SosEntity | null;
 }
 
 // ---- Follow-up ----

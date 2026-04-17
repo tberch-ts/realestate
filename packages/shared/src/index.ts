@@ -336,3 +336,31 @@ export interface FollowupResult {
   count: number;
   candidates: FollowupScored[];
 }
+
+// ---------- Ownership / portfolio ----------
+
+export interface OwnerCluster {
+  owner: string;
+  ownerType: OwnerType;
+  mailingState?: string;
+  outOfState: boolean;
+  propertyCount: number;
+  totalUnits: number;
+  avgYearBuilt?: number;
+  properties: FollowupScored[];
+}
+
+// ---------- Colorado SOS ----------
+
+export interface SosEntity {
+  entityName: string;
+  sosId?: string;              // Colorado Entity ID
+  status?: string;             // 'Good Standing' | 'Delinquent' | ...
+  formedDate?: string;         // ISO date
+  registeredAgent?: {
+    name?: string;
+    address?: string;
+  };
+  principalAddress?: string;
+  profileUrl?: string;         // deep link back to SOS page
+}

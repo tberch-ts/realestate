@@ -15,7 +15,10 @@ import { loiRouter } from './routes/loi.js';
 import { loiDraftsRouter } from './routes/loiDrafts.js';
 import { hotspotsRouter } from './routes/hotspots.js';
 import { followupRouter } from './routes/followup.js';
+import { portfolioRouter } from './routes/portfolio.js';
+import { sosRouter } from './routes/sos.js';
 import { warmDenverHotspots } from './providers/denverNeighborhoods.js';
+import { warmDenverPortfolio } from './providers/denverPortfolio.js';
 
 const app = express();
 app.use(cors());
@@ -33,6 +36,8 @@ app.use('/api/loi/drafts', loiDraftsRouter);
 app.use('/api/loi', loiRouter);
 app.use('/api/hotspots', hotspotsRouter);
 app.use('/api/followup', followupRouter);
+app.use('/api/portfolio', portfolioRouter);
+app.use('/api/sos', sosRouter);
 
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('[api] unhandled error:', err);
@@ -42,6 +47,7 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 const port = Number(process.env.API_PORT ?? 4000);
 app.listen(port, () => {
   console.log(`[api] listening on :${port}`);
-  // Warm Denver hotspots in background so first user request is served from cache.
+  // Warm Denver hotspots + portfolio in background so first user request is served from cache.
   setTimeout(() => warmDenverHotspots(), 500);
+  setTimeout(() => warmDenverPortfolio(), 1500);
 });

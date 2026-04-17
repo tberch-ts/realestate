@@ -77,9 +77,15 @@ export default function Home() {
           </button>
         </form>
 
-        <div className="flex gap-4 text-sm text-slate-400 mb-10">
+        <div className="flex gap-4 text-sm text-slate-400 mb-10 flex-wrap">
           <Link to="/hotspots" className="hover:text-indigo-300 underline">
             Deal-zone map →
+          </Link>
+          <Link to="/portfolio" className="hover:text-indigo-300 underline">
+            Owners →
+          </Link>
+          <Link to="/portfolio?oos=1" className="hover:text-indigo-300 underline">
+            Out-of-state owners →
           </Link>
           <Link to="/deals" className="hover:text-indigo-300 underline">
             Saved deals →

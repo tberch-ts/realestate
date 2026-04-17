@@ -9,6 +9,8 @@ import Deals from './pages/Deals';
 import Loi from './pages/Loi';
 import Hotspots from './pages/Hotspots';
 import Followup from './pages/Followup';
+import Portfolio from './pages/Portfolio';
+import Owner from './pages/Owner';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
@@ -21,6 +23,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <Route path="/loi" element={<Loi />} />
         <Route path="/hotspots" element={<Hotspots />} />
         <Route path="/followup" element={<Followup />} />
+        <Route path="/portfolio" element={<Portfolio />} />
+        <Route path="/owner" element={<Owner />} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>
