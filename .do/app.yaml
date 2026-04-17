@@ -22,8 +22,6 @@ services:
       branch: main
       deploy_on_push: true
     http_port: 4000
-    internal_ports:
-      - 4000
     instance_size_slug: basic-xs
     instance_count: 1
     health_check:
