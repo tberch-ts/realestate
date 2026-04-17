@@ -1,7 +1,20 @@
-import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import type { DealInput, LoiInput } from '@mfa/shared';
-import { downloadLoi, fetchDeal } from '../lib/api';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import type {
+  AssetClass,
+  DealInput,
+  LoiDealContext,
+  LoiDraft,
+  LoiInput,
+} from '@mfa/shared';
+import {
+  createDraft,
+  deleteDraft,
+  downloadLoi,
+  fetchDeal,
+  loadDraft,
+  updateDraft,
+} from '../lib/api';
 
 const DEFAULT_DD_MATERIALS = [
   'Trailing-12-month operating statements (T12)',
@@ -16,36 +29,185 @@ const DEFAULT_DD_MATERIALS = [
   'Pending litigation disclosures',
 ];
 
+type SaveState = 'idle' | 'saving' | 'saved' | 'error' | 'offline';
+
 export default function Loi() {
   const [params] = useSearchParams();
-  const dealId = params.get('dealId');
-  const [deal, setDeal] = useState<DealInput | null>(null);
-  const [dealError, setDealError] = useState<string | null>(null);
+  const nav = useNavigate();
+  const draftIdParam = params.get('draftId');
+  const dealIdParam = params.get('dealId');
+  const addressParam = params.get('address') ?? '';
+  const unitsParam = params.get('units');
+
+  const [draftId, setDraftId] = useState<number | null>(
+    draftIdParam ? Number(draftIdParam) : null
+  );
   const [loi, setLoi] = useState<LoiInput>(() => defaultLoi());
+  const [dealContext, setDealContext] = useState<LoiDealContext>(() => ({
+    address: addressParam,
+    units: unitsParam ? Number(unitsParam) : undefined,
+    purchasePrice: 0,
+    assetClass: 'unknown' as AssetClass,
+  }));
+  const [status, setStatus] = useState<LoiDraft['status']>('draft');
+
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<SaveState>('idle');
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
 
+  // Ensures autosave isn't triggered during initial hydration.
+  const hydrating = useRef(true);
+
+  // ---------- Initial load: 3 entry modes ----------
   useEffect(() => {
-    if (!dealId) {
-      setDealError('No dealId in URL. Save a deal first and click "Generate LOI" from the deal page.');
-      return;
-    }
-    fetchDeal(Number(dealId))
-      .then((d) => setDeal(d))
-      .catch((e: Error) => setDealError(e.message));
-  }, [dealId]);
+    let cancelled = false;
 
+    async function init() {
+      try {
+        if (draftIdParam) {
+          // Mode 1: ?draftId=X
+          const d = await loadDraft(Number(draftIdParam));
+          if (cancelled) return;
+          setDraftId(d.id);
+          setLoi(d.loi);
+          setDealContext(d.dealContext);
+          setStatus(d.status);
+          setSavedAt(new Date(d.updatedAt));
+        } else if (dealIdParam) {
+          // Mode 2: ?dealId=X — hydrate a fresh draft from a saved deal
+          const deal = await fetchDeal(Number(dealIdParam));
+          if (cancelled) return;
+          const ctx: LoiDealContext = {
+            address: deal.address,
+            name: deal.name,
+            units: deal.underwriting.units,
+            assetClass: deal.assetClass,
+            purchasePrice: deal.underwriting.purchasePrice,
+          };
+          setDealContext(ctx);
+          // Create a draft linked to this deal so autosave has something to write to.
+          const created = await createDraft({
+            address: deal.address,
+            dealId: deal.id,
+            propertyId: deal.propertyId,
+            loi,
+            dealContext: ctx,
+          }).catch(() => null);
+          if (cancelled) return;
+          if (created) {
+            setDraftId(created.id);
+            setSavedAt(new Date(created.updatedAt));
+          } else {
+            setSaveState('offline');
+          }
+        } else if (addressParam) {
+          // Mode 3: ?address=X (&units=N) — brand new draft from a property click
+          const ctx: LoiDealContext = {
+            address: addressParam,
+            units: unitsParam ? Number(unitsParam) : undefined,
+            purchasePrice: 0,
+            assetClass: 'unknown' as AssetClass,
+          };
+          setDealContext(ctx);
+          const created = await createDraft({
+            address: addressParam,
+            loi,
+            dealContext: ctx,
+          }).catch(() => null);
+          if (cancelled) return;
+          if (created) {
+            setDraftId(created.id);
+            setSavedAt(new Date(created.updatedAt));
+          } else {
+            setSaveState('offline');
+          }
+        } else {
+          setLoadError(
+            'No address, dealId, or draftId in URL. Start from a property or the follow-up list.'
+          );
+        }
+      } catch (e) {
+        if (!cancelled) setLoadError((e as Error).message);
+      } finally {
+        if (!cancelled) {
+          setLoaded(true);
+          // Release hydrating lock on next tick so autosave effect doesn't fire on hydration.
+          setTimeout(() => {
+            hydrating.current = false;
+          }, 50);
+        }
+      }
+    }
+
+    init();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ---------- Debounced autosave ----------
+  const saveRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (hydrating.current) return;
+    if (!draftId) return;
+    if (saveRef.current) window.clearTimeout(saveRef.current);
+    saveRef.current = window.setTimeout(() => {
+      setSaveState('saving');
+      updateDraft(draftId, { loi, dealContext, status })
+        .then((d) => {
+          setSaveState('saved');
+          setSavedAt(new Date(d.updatedAt));
+        })
+        .catch(() => setSaveState('error'));
+    }, 500);
+    return () => {
+      if (saveRef.current) window.clearTimeout(saveRef.current);
+    };
+  }, [loi, dealContext, status, draftId]);
+
+  // ---------- PDF download ----------
   async function onDownload() {
-    if (!deal) return;
     setError(null);
     setDownloading(true);
     try {
+      const deal: DealInput = {
+        address: dealContext.address,
+        name: dealContext.name,
+        assetClass: dealContext.assetClass,
+        underwriting: {
+          purchasePrice: dealContext.purchasePrice ?? 0,
+          units: dealContext.units ?? 0,
+          currentGrossRent: 0,
+          vacancyPct: 5,
+          opexPct: 45,
+          loan: { ltv: 0.65, ratePct: 6.5, amortYears: 30 },
+        },
+      };
       await downloadLoi(deal, loi);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setDownloading(false);
     }
+  }
+
+  async function onDelete() {
+    if (!draftId) return;
+    if (!confirm('Delete this LOI draft? This cannot be undone.')) return;
+    try {
+      await deleteDraft(draftId);
+      nav('/');
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  async function onMarkSent() {
+    setStatus('sent');
   }
 
   function toggleDd(item: string) {
@@ -56,42 +218,136 @@ export default function Loi() {
     });
   }
 
+  const priceMissing = !dealContext.purchasePrice || dealContext.purchasePrice === 0;
+
   return (
     <div className="min-h-screen px-6 py-10">
       <div className="max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <Link to="/deals" className="text-sm text-indigo-400 hover:text-indigo-300">
-              ← Deals
+        <div className="flex items-start justify-between mb-6 gap-4">
+          <div className="min-w-0 flex-1">
+            <Link to="/" className="text-sm text-indigo-400 hover:text-indigo-300">
+              ← Home
             </Link>
             <h1 className="text-3xl font-bold mt-2">Letter of Intent</h1>
-            <p className="text-slate-400 text-sm mt-1">
-              {deal?.address ?? dealError ?? 'Loading…'}
+            <p className="text-slate-400 text-sm mt-1 truncate" title={dealContext.address}>
+              {dealContext.address || 'No address'}
+              {status !== 'draft' && (
+                <span className="ml-3 text-[10px] px-1.5 py-0.5 rounded border border-slate-600 bg-slate-800 text-slate-300 uppercase">
+                  {status}
+                </span>
+              )}
             </p>
+            <SaveIndicator state={saveState} at={savedAt} />
           </div>
-          <button
-            onClick={onDownload}
-            disabled={!deal || downloading}
-            className="px-5 py-2 rounded bg-indigo-500 hover:bg-indigo-400 disabled:bg-slate-700 font-semibold text-white"
-          >
-            {downloading ? 'Generating…' : 'Download PDF'}
-          </button>
+          <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+            {draftId && status === 'draft' && (
+              <button
+                onClick={onMarkSent}
+                className="px-3 py-2 rounded border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10 text-sm"
+              >
+                Mark as sent
+              </button>
+            )}
+            <button
+              onClick={onDownload}
+              disabled={!loaded || downloading || !dealContext.address}
+              className="px-5 py-2 rounded bg-indigo-500 hover:bg-indigo-400 disabled:bg-slate-700 font-semibold text-white"
+            >
+              {downloading ? 'Generating…' : 'Download PDF'}
+            </button>
+            {draftId && (
+              <button
+                onClick={onDelete}
+                className="px-3 py-2 rounded border border-rose-500/40 text-rose-300 hover:bg-rose-500/10 text-sm"
+              >
+                Delete
+              </button>
+            )}
+          </div>
         </div>
 
-        {dealError && (
+        {loadError && (
           <div className="p-3 rounded border border-rose-500/40 bg-rose-500/10 text-rose-200 text-sm mb-6">
-            {dealError}
+            {loadError}
           </div>
         )}
-
+        {saveState === 'offline' && (
+          <div className="p-3 rounded border border-amber-500/40 bg-amber-500/10 text-amber-200 text-sm mb-6">
+            Working in offline mode — autosave disabled. Start Postgres (<code className="text-xs">docker compose up db</code>) to enable draft persistence.
+          </div>
+        )}
+        {priceMissing && loaded && (
+          <div className="p-3 rounded border border-amber-500/40 bg-amber-500/10 text-amber-200 text-sm mb-6">
+            Purchase price not set — the PDF will render <code>$0</code>. Fill in the price below to make this offer usable.
+          </div>
+        )}
         {error && (
           <div className="p-3 rounded border border-rose-500/40 bg-rose-500/10 text-rose-200 text-sm mb-6">
             {error}
           </div>
         )}
 
-        {deal && (
+        {loaded && (
           <div className="space-y-6">
+            <Section title="Property & price">
+              <Grid cols={4}>
+                <Field label="Property address" span={2}>
+                  <input
+                    className={INPUT}
+                    value={dealContext.address}
+                    onChange={(e) => setDealContext({ ...dealContext, address: e.target.value })}
+                  />
+                </Field>
+                <Field label="Property name">
+                  <input
+                    className={INPUT}
+                    value={dealContext.name ?? ''}
+                    onChange={(e) => setDealContext({ ...dealContext, name: e.target.value })}
+                    placeholder="e.g. University Commons"
+                  />
+                </Field>
+                <Field label="Asset class">
+                  <select
+                    className={INPUT}
+                    value={dealContext.assetClass ?? 'unknown'}
+                    onChange={(e) =>
+                      setDealContext({ ...dealContext, assetClass: e.target.value as AssetClass })
+                    }
+                  >
+                    <option value="unknown">Unknown</option>
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="C">C</option>
+                    <option value="D">D</option>
+                  </select>
+                </Field>
+                <Field label="Units">
+                  <input
+                    type="number"
+                    className={INPUT}
+                    value={dealContext.units ?? ''}
+                    onChange={(e) =>
+                      setDealContext({
+                        ...dealContext,
+                        units: e.target.value === '' ? undefined : Number(e.target.value),
+                      })
+                    }
+                  />
+                </Field>
+                <Field label="Purchase price">
+                  <input
+                    type="number"
+                    className={INPUT}
+                    value={dealContext.purchasePrice || ''}
+                    onChange={(e) =>
+                      setDealContext({ ...dealContext, purchasePrice: Number(e.target.value) })
+                    }
+                    placeholder="0"
+                  />
+                </Field>
+              </Grid>
+            </Section>
+
             <Section title="Buyer">
               <Grid cols={2}>
                 <Field label="Entity name">
@@ -319,6 +575,41 @@ export default function Loi() {
   );
 }
 
+function SaveIndicator({ state, at }: { state: SaveState; at: Date | null }) {
+  const ago = useRelativeTime(at);
+  const label = useMemo(() => {
+    switch (state) {
+      case 'saving':
+        return { text: 'Saving…', cls: 'text-slate-400' };
+      case 'saved':
+        return { text: `Saved ${ago}`, cls: 'text-emerald-400' };
+      case 'error':
+        return { text: 'Save failed — retry', cls: 'text-rose-400' };
+      case 'offline':
+        return { text: 'Offline — autosave disabled', cls: 'text-amber-300' };
+      default:
+        return at ? { text: `Saved ${ago}`, cls: 'text-slate-500' } : null;
+    }
+  }, [state, ago, at]);
+  if (!label) return null;
+  return <div className={`text-xs mt-0.5 ${label.cls}`}>{label.text}</div>;
+}
+
+// Rerenders label every 15s so "Saved 2m ago" stays current.
+function useRelativeTime(d: Date | null): string {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setTick((x) => x + 1), 15_000);
+    return () => clearInterval(t);
+  }, []);
+  if (!d) return '';
+  const seconds = Math.round((Date.now() - d.getTime()) / 1000);
+  if (seconds < 5) return 'just now';
+  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m ago`;
+  return `${Math.round(seconds / 3600)}h ago`;
+}
+
 function defaultLoi(): LoiInput {
   const today = new Date();
   const exp = new Date(today);
@@ -420,3 +711,4 @@ function Toggle({
     </label>
   );
 }
+

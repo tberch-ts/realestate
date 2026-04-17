@@ -170,13 +170,21 @@ function Row({ c }: { c: FollowupScored }) {
         {c.salePrice ? fmtMoney(c.salePrice) : '—'}
         {c.saleDate && <div className="text-xs text-slate-500">{c.saleDate}</div>}
       </td>
-      <td className="py-2 px-3 text-right align-top">
-        <Link
-          to={`/property?address=${encodeURIComponent(c.address + ', Denver, CO')}`}
-          className="text-indigo-400 hover:text-indigo-300 text-xs"
-        >
-          Analyze →
-        </Link>
+      <td className="py-2 px-3 text-right align-top whitespace-nowrap">
+        <div className="flex flex-col gap-1 items-end">
+          <Link
+            to={`/property?address=${encodeURIComponent(c.address + ', Denver, CO')}`}
+            className="text-indigo-400 hover:text-indigo-300 text-xs"
+          >
+            Analyze →
+          </Link>
+          <Link
+            to={`/loi?address=${encodeURIComponent(c.address + ', Denver, CO')}${c.units ? `&units=${c.units}` : ''}`}
+            className="text-emerald-400 hover:text-emerald-300 text-xs"
+          >
+            Start LOI →
+          </Link>
+        </div>
       </td>
     </tr>
   );

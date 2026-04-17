@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import type { LoiDraft } from '@mfa/shared';
+import { deleteDraft, listDrafts } from '../lib/api';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000';
 
@@ -18,6 +20,7 @@ export default function Home() {
   const [zones, setZones] = useState<RankedZone[] | null>(null);
   const [zonesError, setZonesError] = useState<string | null>(null);
   const [zonesLoading, setZonesLoading] = useState(true);
+  const [drafts, setDrafts] = useState<LoiDraft[] | null>(null);
 
   useEffect(() => {
     fetch(`${API_BASE}/api/hotspots/denver/ranked?limit=10`)
@@ -25,7 +28,20 @@ export default function Home() {
       .then((body) => setZones(body.data ?? []))
       .catch((e: Error) => setZonesError(e.message))
       .finally(() => setZonesLoading(false));
+
+    // LOI drafts — best-effort. If Postgres is down, just show nothing.
+    listDrafts('draft').then(setDrafts).catch(() => setDrafts([]));
   }, []);
+
+  async function handleDeleteDraft(id: number) {
+    if (!confirm('Delete this LOI draft?')) return;
+    try {
+      await deleteDraft(id);
+      setDrafts((prev) => (prev ?? []).filter((d) => d.id !== id));
+    } catch {
+      // silent — optimistic UX
+    }
+  }
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -72,6 +88,23 @@ export default function Home() {
             New blank deal →
           </Link>
         </div>
+
+        {drafts && drafts.length > 0 && (
+          <section className="mb-8">
+            <div className="flex items-baseline gap-3 mb-3">
+              <h2 className="text-lg font-semibold text-slate-100">📝 LOI drafts</h2>
+              <span className="text-xs text-slate-500">
+                Resume where you left off — {drafts.length}{' '}
+                {drafts.length === 1 ? 'draft' : 'drafts'}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {drafts.slice(0, 6).map((d) => (
+                <DraftCard key={d.id} draft={d} onDelete={handleDeleteDraft} />
+              ))}
+            </div>
+          </section>
+        )}
 
         <HotZoneStrip title="🔥 Hot zones" subtitle="Score 90+" zones={hot} loading={zonesLoading} error={zonesError} accent="emerald" />
         <HotZoneStrip title="🟠 Warm zones" subtitle="Score 80–89" zones={warm} loading={zonesLoading} error={null} accent="amber" />
@@ -171,6 +204,64 @@ function HotZoneStrip({
       </div>
     </section>
   );
+}
+
+function DraftCard({
+  draft,
+  onDelete,
+}: {
+  draft: LoiDraft;
+  onDelete: (id: number) => void;
+}) {
+  const updated = new Date(draft.updatedAt);
+  const ago = relTime(updated);
+  const buyer = draft.loi.buyerEntity || <span className="text-slate-500 italic">no buyer yet</span>;
+  const price = draft.dealContext.purchasePrice;
+  return (
+    <div className="p-4 rounded-xl border border-indigo-500/30 bg-slate-900/40 hover:bg-slate-900/80 transition">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <Link to={`/loi?draftId=${draft.id}`} className="block">
+            <div className="text-sm font-semibold text-slate-100 truncate" title={draft.address}>
+              {draft.address}
+            </div>
+            <div className="text-xs text-slate-400 truncate mt-0.5">Buyer: {buyer}</div>
+          </Link>
+        </div>
+        {price != null && price > 0 && (
+          <div className="text-sm text-slate-300 whitespace-nowrap">
+            {price.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}
+          </div>
+        )}
+      </div>
+      <div className="flex items-center justify-between mt-3">
+        <div className="text-xs text-slate-500">Saved {ago}</div>
+        <div className="flex gap-3 text-xs">
+          <Link
+            to={`/loi?draftId=${draft.id}`}
+            className="text-indigo-400 hover:text-indigo-300"
+          >
+            Continue →
+          </Link>
+          <button
+            onClick={() => onDelete(draft.id)}
+            className="text-slate-500 hover:text-rose-400"
+            aria-label="Delete draft"
+          >
+            🗑
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function relTime(d: Date): string {
+  const s = Math.round((Date.now() - d.getTime()) / 1000);
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.round(s / 60)}m ago`;
+  if (s < 86400) return `${Math.round(s / 3600)}h ago`;
+  return `${Math.round(s / 86400)}d ago`;
 }
 
 function Header({ title, subtitle }: { title: string; subtitle: string }) {

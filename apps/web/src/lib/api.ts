@@ -2,6 +2,9 @@ import type {
   DealInput,
   DealRecord,
   FollowupResult,
+  LoiDraft,
+  LoiDraftCreate,
+  LoiDraftPatch,
   LoiInput,
   PropertySnapshot,
   UnderwritingInput,
@@ -9,6 +12,48 @@ import type {
 } from '@mfa/shared';
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000';
+
+// ---- LOI drafts ----
+
+export async function createDraft(input: LoiDraftCreate): Promise<LoiDraft> {
+  const res = await fetch(`${BASE}/api/loi/drafts`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(`create draft: ${res.status}`);
+  return res.json();
+}
+
+export async function updateDraft(id: number, patch: LoiDraftPatch): Promise<LoiDraft> {
+  const res = await fetch(`${BASE}/api/loi/drafts/${id}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error(`update draft: ${res.status}`);
+  return res.json();
+}
+
+export async function loadDraft(id: number): Promise<LoiDraft> {
+  const res = await fetch(`${BASE}/api/loi/drafts/${id}`);
+  if (!res.ok) throw new Error(`load draft: ${res.status}`);
+  return res.json();
+}
+
+export async function listDrafts(status: 'draft' | 'sent' | 'archived' | 'all' = 'draft'): Promise<LoiDraft[]> {
+  const res = await fetch(`${BASE}/api/loi/drafts?status=${status}`);
+  if (!res.ok) throw new Error(`list drafts: ${res.status}`);
+  const body = await res.json();
+  return body.data as LoiDraft[];
+}
+
+export async function deleteDraft(id: number): Promise<void> {
+  const res = await fetch(`${BASE}/api/loi/drafts/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`delete draft: ${res.status}`);
+}
+
+// ---- Follow-up ----
 
 export async function fetchFollowup(
   zone: string,

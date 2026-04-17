@@ -263,6 +263,46 @@ export interface LoiInput {
   brokerFee?: string;           // e.g. "2% to Seller's broker"
 }
 
+// ---------- LOI drafts ----------
+
+export type LoiDraftStatus = 'draft' | 'sent' | 'archived';
+
+export interface LoiDealContext {
+  address: string;
+  name?: string;
+  units?: number;
+  assetClass?: AssetClass;
+  purchasePrice?: number;     // copied out of underwriting for quick access on the LOI form
+}
+
+export interface LoiDraft {
+  id: number;
+  address: string;
+  dealId?: number;
+  propertyId?: number;
+  loi: LoiInput;
+  dealContext: LoiDealContext;
+  status: LoiDraftStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Payload the LOI form sends on create.
+export interface LoiDraftCreate {
+  address: string;
+  dealId?: number;
+  propertyId?: number;
+  loi: LoiInput;
+  dealContext: LoiDealContext;
+}
+
+// Payload the LOI form sends on autosave.
+export interface LoiDraftPatch {
+  loi?: LoiInput;
+  dealContext?: LoiDealContext;
+  status?: LoiDraftStatus;
+}
+
 // ---------- Follow-up prospects ----------
 
 export type OwnerType = 'individual' | 'llc' | 'institutional' | 'unknown';
