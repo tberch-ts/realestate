@@ -2,14 +2,34 @@ import pg from 'pg';
 
 const { Pool } = pg;
 
-// DO managed Postgres terminates SSL with a cert that isn't in the default Node trust store;
-// rejectUnauthorized:false is the standard DO pattern. Dev Postgres has no SSL.
-const needsSsl = process.env.NODE_ENV === 'production' || /sslmode=require/i.test(process.env.DATABASE_URL ?? '');
+// DO managed Postgres uses a self-signed cert. The connection string DO injects has
+// `sslmode=require`, which pg-connection-string v2.7+ treats as `verify-full` —
+// that overrides any `ssl` config we pass and rejects the self-signed chain.
+// Workaround: strip sslmode from the URL and configure SSL explicitly.
+function buildConnConfig(): pg.PoolConfig {
+  const raw = process.env.DATABASE_URL;
+  if (!raw) return {};
 
-export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: needsSsl ? { rejectUnauthorized: false } : undefined,
-});
+  const inProd = process.env.NODE_ENV === 'production';
+  let sslmodeInUrl = false;
+  let connectionString = raw;
+  try {
+    const url = new URL(raw);
+    sslmodeInUrl = url.searchParams.has('sslmode');
+    url.searchParams.delete('sslmode');
+    connectionString = url.toString();
+  } catch {
+    // not a URL — leave as-is
+  }
+
+  const needsSsl = inProd || sslmodeInUrl;
+  return {
+    connectionString,
+    ssl: needsSsl ? { rejectUnauthorized: false } : undefined,
+  };
+}
+
+export const pool = new Pool(buildConnConfig());
 
 pool.on('error', (err) => {
   console.error('[db] pool error:', err);
