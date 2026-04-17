@@ -12,6 +12,17 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const migrationsDir = join(__dirname, '../../../../db/migrations');
 
 async function main() {
+  // Diagnostic: who/where are we?
+  const who = await pool.query(
+    "SELECT current_user, current_database(), session_user, current_setting('server_version') AS version"
+  );
+  console.log('[migrate] context:', who.rows[0]);
+  const grants = await pool.query(
+    `SELECT has_database_privilege(current_user, current_database(), 'CREATE') AS can_create_db,
+            has_schema_privilege(current_user, 'public', 'CREATE') AS can_create_public`
+  );
+  console.log('[migrate] grants:', grants.rows[0]);
+
   // PG 15+ + DO managed PG: the app user doesn't own the public schema, so CREATE
   // TABLE in public fails. Create our own `app` schema (which we own) and route
   // unqualified migration DDL into it via search_path. Runtime queries do the same
