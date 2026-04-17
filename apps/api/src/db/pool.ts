@@ -26,6 +26,9 @@ function buildConnConfig(): pg.PoolConfig {
   return {
     connectionString,
     ssl: needsSsl ? { rejectUnauthorized: false } : undefined,
+    // Match the migrator: every connection looks at the `app` schema first so
+    // unqualified table names resolve there. Falls back to `public` for built-ins.
+    options: '-c search_path=app,public',
   };
 }
 
