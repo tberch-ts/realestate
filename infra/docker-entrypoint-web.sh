@@ -8,7 +8,8 @@ set -eu
 ENV_JS=/usr/share/nginx/html/env.js
 HTPASSWD=/etc/nginx/.htpasswd
 
-API_URL="${API_URL:-/api}"
+# Default to empty so call sites use relative URLs (every fetch already prefixes /api).
+API_URL="${API_URL:-}"
 GOOGLE_MAPS_API_KEY="${GOOGLE_MAPS_API_KEY:-}"
 
 cat > "$ENV_JS" <<EOF
