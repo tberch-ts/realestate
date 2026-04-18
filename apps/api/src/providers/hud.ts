@@ -16,8 +16,8 @@ export async function fetchHudFmr(year = new Date().getFullYear()): Promise<Prov
   }
 
   try {
-    // Denver-Aurora-Lakewood, CO MSA FMR area code is METRO19740MM0000 (approximate; verified at runtime)
-    const area = 'METRO19740MM0000';
+    // Denver-Aurora-Lakewood, CO MSA FMR code. Verified against HUD's listMetroAreas endpoint.
+    const area = 'METRO19740M19740';
     const url = `https://www.huduser.gov/hudapi/public/fmr/data/${area}?year=${year}`;
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) return { provider, status: 'error', message: `HTTP ${res.status}` };
