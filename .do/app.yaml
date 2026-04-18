@@ -37,9 +37,10 @@ services:
       - { key: API_PORT, value: "4000", scope: RUN_TIME }
       - { key: DATABASE_URL, scope: RUN_TIME, type: SECRET }
       - { key: GOOGLE_MAPS_API_KEY, scope: RUN_TIME, type: SECRET }
-      - { key: CENSUS_API_KEY, scope: RUN_TIME, type: SECRET }
-      - { key: BLS_API_KEY, scope: RUN_TIME, type: SECRET }
+      - { key: CENSUS_API_KEY, scope: RUN_TIME, type: SECRET }   # bumps Census rate limit (~500/day -> generous)
+      - { key: BLS_API_KEY, scope: RUN_TIME, type: SECRET }      # 25/day anonymous -> 500/day registered
       - { key: FBI_API_KEY, scope: RUN_TIME, type: SECRET }
+      - { key: HUD_API_TOKEN, scope: RUN_TIME, type: SECRET }    # required for HUD FMR
       - { key: BASIC_AUTH_USER, scope: RUN_TIME, type: SECRET }
       - { key: BASIC_AUTH_PASS, scope: RUN_TIME, type: SECRET }
 
