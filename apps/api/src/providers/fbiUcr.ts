@@ -4,27 +4,23 @@ import { fileURLToPath } from 'node:url';
 import type { CrimeRecord, GeocodedAddress, ProviderResult } from '@mfa/shared';
 
 // FBI Crime Data Explorer (api.usa.gov/crime/fbi/cde) — agency-level violent crime.
-// v1 hard-codes Denver PD ORI; expand to ORI-by-geocode lookup later.
+// v1 hardcodes Denver PD ORI; expand to ORI-by-locality lookup later.
 
 const NATIONAL_VIOLENT_RATE = 380.7; // per 100k, recent FBI UCR national baseline
-const DENVER_PD_ORI = 'CO0010100';
+const DENVER_PD_ORI = 'CODPD0000';
+const DENVER_AGENCY_LABEL = 'Denver Police Department';
 
 const CACHE_DIR = join(dirname(fileURLToPath(import.meta.url)), '../../.cache');
-const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7d (FBI data is annual)
+const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7d (FBI publishes annually)
 
-interface CachedCrime {
-  ts: number;
-  payload: CrimeRecord;
-}
+interface CachedCrime { ts: number; payload: CrimeRecord; }
 
 async function readCache(ori: string): Promise<CrimeRecord | null> {
   try {
     const raw = await readFile(join(CACHE_DIR, `fbi_${ori}.json`), 'utf8');
     const cached = JSON.parse(raw) as CachedCrime;
     if (Date.now() - cached.ts < CACHE_TTL_MS) return cached.payload;
-  } catch {
-    /* cache miss */
-  }
+  } catch { /* miss */ }
   return null;
 }
 
@@ -35,69 +31,48 @@ async function writeCache(ori: string, payload: CrimeRecord): Promise<void> {
       join(CACHE_DIR, `fbi_${ori}.json`),
       JSON.stringify({ ts: Date.now(), payload } satisfies CachedCrime),
     );
-  } catch {
-    /* best-effort */
-  }
+  } catch { /* best-effort */ }
 }
 
-function pickOri(geocode: GeocodedAddress): string | null {
+function pickAgency(geocode: GeocodedAddress): { ori: string; label: string } | null {
   if (geocode.stateCode !== 'CO') return null;
-  // Denver locality variants. Other CO cities can be added here as we expand.
   const locality = (geocode.components?.locality ?? '').toLowerCase();
-  if (locality === 'denver') return DENVER_PD_ORI;
+  if (locality === 'denver') return { ori: DENVER_PD_ORI, label: DENVER_AGENCY_LABEL };
   return null;
 }
 
 interface FbiSummarizedResponse {
-  // Real shape from cde.ucr.cjis.gov varies by endpoint version; we accept either.
-  // Format A: { offenses: { actuals: { 'Violent Crime': {YYYY: n} } }, populations: { population: {YYYY: n} } }
-  offenses?: { actuals?: Record<string, Record<string, number>> };
-  populations?: { population?: Record<string, number> };
-  // Format B: { data: [{ data_year, violent_crime, population }] }
-  data?: Array<{
-    data_year?: number;
-    violent_crime?: number;
-    population?: number;
-  }>;
+  offenses?: {
+    rates?: Record<string, Record<string, number>>;   // 'Denver Police Department Offenses': { 'MM-YYYY': rate, ... }
+    actuals?: Record<string, Record<string, number>>;
+  };
+  populations?: { population?: Record<string, Record<string, number>> };
 }
 
-function extractLatestYearRate(body: FbiSummarizedResponse): {
-  year: number;
-  rate: number;
-} | null {
-  // Format A
-  const actuals = body.offenses?.actuals;
-  const pops = body.populations?.population;
-  if (actuals && pops) {
-    const violentSeries = actuals['Violent Crime'] ?? actuals['violent-crime'] ?? {};
-    const years = Object.keys(violentSeries)
-      .map((y) => Number(y))
-      .filter((y) => Number.isFinite(y) && pops[String(y)])
-      .sort((a, b) => b - a);
-    if (years.length > 0) {
-      const y = years[0];
-      const v = violentSeries[String(y)];
-      const p = pops[String(y)];
-      if (p > 0 && Number.isFinite(v)) {
-        return { year: y, rate: (v / p) * 100000 };
-      }
-    }
+// Sum 12 monthly per-100k rates within a year to get the annual rate per 100k.
+// Returns the latest year that has all 12 months available.
+function latestFullYearRate(
+  body: FbiSummarizedResponse,
+  agencyOffensesKey: string
+): { year: number; rate: number } | null {
+  const monthly = body.offenses?.rates?.[agencyOffensesKey];
+  if (!monthly) return null;
+
+  const byYear = new Map<number, number[]>();
+  for (const [mmYYYY, rate] of Object.entries(monthly)) {
+    const [, yyyy] = mmYYYY.split('-');
+    const y = Number(yyyy);
+    if (!Number.isFinite(y) || !Number.isFinite(rate)) continue;
+    if (!byYear.has(y)) byYear.set(y, []);
+    byYear.get(y)!.push(rate);
   }
 
-  // Format B
-  if (Array.isArray(body.data) && body.data.length > 0) {
-    const sorted = [...body.data]
-      .filter((r) => r.data_year && r.population && r.violent_crime !== undefined)
-      .sort((a, b) => (b.data_year ?? 0) - (a.data_year ?? 0));
-    if (sorted.length > 0) {
-      const r = sorted[0];
-      const p = r.population ?? 0;
-      const v = r.violent_crime ?? 0;
-      if (p > 0) return { year: r.data_year ?? 0, rate: (v / p) * 100000 };
-    }
-  }
+  const fullYears = [...byYear.entries()]
+    .filter(([, arr]) => arr.length === 12)
+    .map(([y, arr]) => ({ year: y, rate: arr.reduce((s, n) => s + n, 0) }))
+    .sort((a, b) => b.year - a.year);
 
-  return null;
+  return fullYears[0] ?? null;
 }
 
 export async function fetchCrime(
@@ -115,8 +90,8 @@ export async function fetchCrime(
     };
   }
 
-  const ori = pickOri(geocode);
-  if (!ori) {
+  const agency = pickAgency(geocode);
+  if (!agency) {
     return {
       provider,
       status: 'not_available',
@@ -125,45 +100,42 @@ export async function fetchCrime(
     };
   }
 
-  const cached = await readCache(ori);
+  const cached = await readCache(agency.ori);
   if (cached) {
     return { provider, status: 'ok', data: cached, fetchedAt: new Date().toISOString() };
   }
 
+  // FBI date params are MM-YYYY (not YYYY). 5-year window so we always have a full year even if the latest isn't published.
   const endYear = new Date().getFullYear() - 1;
-  const startYear = endYear - 4; // 5-year window — handles years where the latest isn't published yet
+  const startYear = endYear - 4;
   const url =
-    `https://api.usa.gov/crime/fbi/cde/summarized/agency/${ori}/violent-crime` +
-    `?from=${startYear}&to=${endYear}&API_KEY=${encodeURIComponent(key)}`;
+    `https://api.usa.gov/crime/fbi/cde/summarized/agency/${agency.ori}/violent-crime` +
+    `?from=01-${startYear}&to=12-${endYear}&API_KEY=${encodeURIComponent(key)}`;
 
   try {
     const res = await fetch(url);
     if (!res.ok) {
-      return {
-        provider,
-        status: 'error',
-        message: `FBI API HTTP ${res.status}`,
-      };
+      return { provider, status: 'error', message: `FBI API HTTP ${res.status}` };
     }
     const body = (await res.json()) as FbiSummarizedResponse;
-    const latest = extractLatestYearRate(body);
+    const latest = latestFullYearRate(body, `${agency.label} Offenses`);
     if (!latest) {
       return {
         provider,
         status: 'not_available',
-        message: 'FBI response had no parseable violent-crime + population series',
+        message: 'FBI response had no full-year violent-crime series for this agency',
         data: { nationalAverageRate: NATIONAL_VIOLENT_RATE },
       };
     }
 
     const record: CrimeRecord = {
-      jurisdiction: geocode.components?.locality ?? 'Denver',
+      jurisdiction: agency.label,
       year: latest.year,
       violentCrimeRate: Math.round(latest.rate * 10) / 10,
       nationalAverageRate: NATIONAL_VIOLENT_RATE,
       belowAverage: latest.rate < NATIONAL_VIOLENT_RATE,
     };
-    await writeCache(ori, record);
+    await writeCache(agency.ori, record);
     return { provider, status: 'ok', data: record, fetchedAt: new Date().toISOString() };
   } catch (err) {
     return { provider, status: 'error', message: (err as Error).message };
