@@ -7,6 +7,53 @@ import {
 
 const INTERACTION_KINDS: InteractionKind[] = ['call', 'email', 'meeting', 'note', 'outreach_sent', 'reply_received'];
 
+const OUTREACH_TEMPLATES: Array<{ label: string; subject: (ctx: TemplateCtx) => string; body: (ctx: TemplateCtx) => string }> = [
+  {
+    label: 'Cold intro (Form D sponsor)',
+    subject: (c) => `Quick intro — saw your ${c.lastFiling ? 'recent Form D filing' : 'firm'}`,
+    body: (c) =>
+      `Hi ${c.firstName || c.name},\n\n` +
+      `I came across ${c.firmName || c.name}${c.lastFiling ? ` through SEC Form D filings` : ''} and wanted to introduce myself.\n\n` +
+      `I invest in multifamily in the Denver metro and am always interested in meeting sponsors with local track records. ` +
+      `Are you open to a brief call to compare notes on the market?\n\n` +
+      `Thanks,\nTom`,
+  },
+  {
+    label: 'Ask for deck / offering memo',
+    subject: (c) => `${c.firmName || c.name} — LP materials?`,
+    body: (c) =>
+      `Hi ${c.firstName || c.name},\n\n` +
+      `Hope you're well. If you have a current investor deck or offering memo for an open deal, ` +
+      `would you mind sharing? Targeting ~$${c.ticket || '50k-200k'} LP positions in multifamily.\n\n` +
+      `Happy to sign an NDA if needed.\n\nThanks,\nTom`,
+  },
+  {
+    label: 'Partnership / co-invest',
+    subject: () => 'Denver multifamily partnership?',
+    body: (c) =>
+      `Hi ${c.firstName || c.name},\n\n` +
+      `I'm an active investor in Denver multifamily and noticed our paths might align. ` +
+      `Do you ever partner on deals with LP/GP splits or JV structures? Happy to share what I'm working on.\n\n` +
+      `Thanks,\nTom`,
+  },
+  {
+    label: 'Follow-up (no prior reply)',
+    subject: () => 'Following up',
+    body: (c) =>
+      `Hi ${c.firstName || c.name},\n\n` +
+      `Circling back on my earlier note. Appreciate you're busy — let me know if a quick call next week or the one after works.\n\n` +
+      `Thanks,\nTom`,
+  },
+];
+
+interface TemplateCtx {
+  name: string;
+  firstName?: string;
+  firmName?: string;
+  lastFiling?: string;
+  ticket?: string;
+}
+
 export default function ContactDetailPage() {
   const { id } = useParams<{ id: string }>();
   const cid = Number(id);
@@ -17,6 +64,12 @@ export default function ContactDetailPage() {
   const [intKind, setIntKind] = useState<InteractionKind>('note');
   const [intSubject, setIntSubject] = useState('');
   const [intBody, setIntBody] = useState('');
+
+  // Outreach composer
+  const [outreachOpen, setOutreachOpen] = useState(false);
+  const [outTo, setOutTo] = useState('');
+  const [outSubject, setOutSubject] = useState('');
+  const [outBody, setOutBody] = useState('');
 
   // Follow-up form
   const [fuDue, setFuDue] = useState<string>(() => {
@@ -59,6 +112,56 @@ export default function ContactDetailPage() {
     const next = current === 'done' ? 'open' : 'done';
     try { await patchFollowUp(fuId, { status: next as 'done' | 'open' }); load(); }
     catch (e) { alert(`Failed: ${(e as Error).message}`); }
+  }
+
+  function openOutreachComposer() {
+    if (!data) return;
+    const c = data.contact;
+    setOutTo(c.email ?? '');
+    setOutreachOpen(true);
+    // Apply default template
+    const ctx = buildCtx(c);
+    const t = OUTREACH_TEMPLATES[0];
+    setOutSubject(t.subject(ctx));
+    setOutBody(t.body(ctx));
+  }
+
+  function applyTemplate(idx: number) {
+    if (!data) return;
+    const ctx = buildCtx(data.contact);
+    const t = OUTREACH_TEMPLATES[idx];
+    setOutSubject(t.subject(ctx));
+    setOutBody(t.body(ctx));
+  }
+
+  function buildCtx(c: Detail['contact']): TemplateCtx {
+    const parts = c.name.trim().split(/\s+/);
+    const firstName = c.kind === 'person' ? parts[0] : undefined;
+    return {
+      name: c.name,
+      firstName,
+      firmName: c.firmName ?? (c.kind === 'firm' ? c.name : undefined),
+      lastFiling: data?.filings[0]?.accessionNumber,
+    };
+  }
+
+  async function sendOutreach() {
+    if (!outSubject.trim() && !outBody.trim()) return;
+    const mailto = `mailto:${encodeURIComponent(outTo)}?subject=${encodeURIComponent(outSubject)}&body=${encodeURIComponent(outBody)}`;
+    // Open the user's default mail client in a new tab — browser handles the handoff.
+    window.location.href = mailto;
+    // Log it immediately — mailto: is fire-and-forget; we can't know for sure they sent it,
+    // but the CRM captures intent so it shows up on the timeline.
+    try {
+      await createInteraction(cid, {
+        kind: 'outreach_sent',
+        subject: outSubject,
+        body: `To: ${outTo}\n\n${outBody}`,
+      });
+      setOutreachOpen(false);
+      setOutTo(''); setOutSubject(''); setOutBody('');
+      load();
+    } catch (e) { alert(`Logged failed: ${(e as Error).message}`); }
   }
 
   async function runPortfolioMatch() {
@@ -113,13 +216,21 @@ export default function ContactDetailPage() {
               )}
               {c.notes && <p className="text-sm text-slate-300 mt-3 whitespace-pre-wrap">{c.notes}</p>}
             </div>
-            <div className="text-xs text-slate-500 text-right">
-              Created {new Date(c.createdAt).toLocaleDateString()}<br />
-              Updated {new Date(c.updatedAt).toLocaleDateString()}
+            <div className="text-xs text-slate-500 text-right space-y-2">
+              <div>
+                Created {new Date(c.createdAt).toLocaleDateString()}<br />
+                Updated {new Date(c.updatedAt).toLocaleDateString()}
+              </div>
+              <button
+                onClick={openOutreachComposer}
+                className="block ml-auto bg-emerald-700 hover:bg-emerald-600 border border-emerald-500 rounded px-3 py-1 text-xs text-white"
+              >
+                Compose outreach →
+              </button>
               {c.kind === 'firm' && (
                 <button
                   onClick={runPortfolioMatch}
-                  className="mt-3 block bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded px-2 py-1 text-xs"
+                  className="block ml-auto bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded px-2 py-1 text-xs"
                 >
                   Match Denver portfolio →
                 </button>
@@ -127,6 +238,62 @@ export default function ContactDetailPage() {
             </div>
           </div>
         </div>
+
+        {outreachOpen && (
+          <div className="bg-slate-900 border border-emerald-700 rounded p-5 mb-6">
+            <div className="flex items-baseline justify-between mb-3">
+              <h2 className="text-lg font-semibold">Outreach email</h2>
+              <button onClick={() => setOutreachOpen(false)} className="text-xs text-slate-400 hover:underline">
+                Cancel
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              <span className="text-xs text-slate-500 self-center mr-1">Template:</span>
+              {OUTREACH_TEMPLATES.map((t, i) => (
+                <button
+                  key={t.label} type="button" onClick={() => applyTemplate(i)}
+                  className="text-xs px-2 py-0.5 rounded border bg-slate-950 border-slate-700 hover:border-slate-500 text-slate-300"
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <div className="space-y-2">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">To</label>
+                <input
+                  value={outTo} onChange={(e) => setOutTo(e.target.value)}
+                  placeholder={c.email ? c.email : '(no email on file — fill in)'}
+                  className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Subject</label>
+                <input
+                  value={outSubject} onChange={(e) => setOutSubject(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Body</label>
+                <textarea
+                  value={outBody} onChange={(e) => setOutBody(e.target.value)} rows={10}
+                  className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-sm font-mono"
+                />
+              </div>
+              <div className="flex items-center gap-2 text-xs text-slate-500">
+                <button onClick={sendOutreach}
+                  className="bg-emerald-600 hover:bg-emerald-500 rounded px-4 py-1.5 text-sm text-white">
+                  Open in email client + log
+                </button>
+                <span>
+                  Opens your default mail app with the message prefilled; logs an
+                  &apos;outreach_sent&apos; entry on the timeline.
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="grid md:grid-cols-2 gap-6">
           {/* Follow-ups */}
