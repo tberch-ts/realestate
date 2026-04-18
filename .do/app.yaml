@@ -1,21 +1,16 @@
 # DigitalOcean App Platform spec for multifamily-analyzer.
 # Create: doctl apps create --spec .do/app.yaml
 # Update: doctl apps update <app-id> --spec .do/app.yaml
+#
+# DATABASE_URL points at a standalone managed PG cluster (provisioned via
+# `doctl databases create mfa-postgres ...`), NOT an inline App Platform
+# database. App Platform inline DBs only grant the binding user CONNECT —
+# DDL migrations fail with permission denied. With a standalone cluster
+# we own doadmin, the migrate job can create schemas, and the cluster
+# survives app deletions.
 
 name: multifamily-analyzer
 region: nyc
-
-databases:
-  - name: mfa-db
-    engine: PG
-    version: "16"
-    # Real managed PG (smallest tier). Dev tier (db-s-dev-database) gives the
-    # bound app user CONNECT only — no CREATE on its own database — so DDL
-    # migrations fail with permission denied. Managed tier makes the app user
-    # the database owner.
-    size: db-s-1vcpu-1gb
-    num_nodes: 1
-    production: false
 
 services:
   - name: api
@@ -37,15 +32,10 @@ services:
       initial_delay_seconds: 20
       period_seconds: 10
       failure_threshold: 3
-    # NOTE: persistent disks aren't accepted at the service level on basic-xs
-    # (App Platform rejects `disk:` here). The Denver warm cache lives in
-    # /app/apps/api/.cache and is rebuilt at startup (~90s of cold latency
-    # right after each deploy). To get persistence, upgrade to a professional
-    # instance size or move the cache to Spaces.
     envs:
       - { key: NODE_ENV, value: production, scope: RUN_TIME }
       - { key: API_PORT, value: "4000", scope: RUN_TIME }
-      - { key: DATABASE_URL, value: "${mfa-db.DATABASE_URL}", scope: RUN_TIME }
+      - { key: DATABASE_URL, scope: RUN_TIME, type: SECRET }
       - { key: GOOGLE_MAPS_API_KEY, scope: RUN_TIME, type: SECRET }
       - { key: CENSUS_API_KEY, scope: RUN_TIME, type: SECRET }
       - { key: BLS_API_KEY, scope: RUN_TIME, type: SECRET }
@@ -82,7 +72,7 @@ jobs:
     instance_count: 1
     envs:
       - { key: NODE_ENV, value: production, scope: RUN_TIME }
-      - { key: DATABASE_URL, value: "${mfa-db.DATABASE_URL}", scope: RUN_TIME }
+      - { key: DATABASE_URL, scope: RUN_TIME, type: SECRET }
 
 domains:
   - domain: re.talkstud.io
