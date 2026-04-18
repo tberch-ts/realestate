@@ -13,7 +13,9 @@ import {
   downloadLoi,
   fetchDeal,
   loadDraft,
+  mailLoi,
   updateDraft,
+  type PostGridAddress,
 } from '../lib/api';
 
 const DEFAULT_DD_MATERIALS = [
@@ -54,6 +56,11 @@ export default function Loi() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [mailing, setMailing] = useState(false);
+  const [mailOpen, setMailOpen] = useState(false);
+  const [mailRecipient, setMailRecipient] = useState<PostGridAddress>(() => ({
+    addressLine1: '', city: '', provinceOrState: 'CO', postalOrZip: '', countryCode: 'US',
+  }));
   const [error, setError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [savedAt, setSavedAt] = useState<Date | null>(null);
@@ -174,20 +181,7 @@ export default function Loi() {
     setError(null);
     setDownloading(true);
     try {
-      const deal: DealInput = {
-        address: dealContext.address,
-        name: dealContext.name,
-        assetClass: dealContext.assetClass,
-        underwriting: {
-          purchasePrice: dealContext.purchasePrice ?? 0,
-          units: dealContext.units ?? 0,
-          currentGrossRent: 0,
-          vacancyPct: 5,
-          opexPct: 45,
-          loan: { ltv: 0.65, ratePct: 6.5, amortYears: 30 },
-        },
-      };
-      await downloadLoi(deal, loi);
+      await downloadLoi(buildDeal(), loi);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -208,6 +202,63 @@ export default function Loi() {
 
   async function onMarkSent() {
     setStatus('sent');
+  }
+
+  function buildDeal(): DealInput {
+    return {
+      address: dealContext.address,
+      name: dealContext.name,
+      assetClass: dealContext.assetClass,
+      underwriting: {
+        purchasePrice: dealContext.purchasePrice ?? 0,
+        units: dealContext.units ?? 0,
+        currentGrossRent: 0,
+        vacancyPct: 5,
+        opexPct: 45,
+        loan: { ltv: 0.65, ratePct: 6.5, amortYears: 30 },
+      },
+    };
+  }
+
+  function openMailComposer() {
+    // Pre-fill recipient line1 from sellerAddress if present (best-effort).
+    const sellerAddr = (loi.sellerAddress ?? '').trim();
+    setMailRecipient({
+      companyName: loi.sellerEntity || undefined,
+      addressLine1: sellerAddr || '',
+      city: '',
+      provinceOrState: 'CO',
+      postalOrZip: '',
+      countryCode: 'US',
+    });
+    setMailOpen(true);
+  }
+
+  async function onMail() {
+    setError(null);
+    if (!mailRecipient.addressLine1 || !mailRecipient.city || !mailRecipient.postalOrZip) {
+      alert('Recipient address, city, and ZIP are required.');
+      return;
+    }
+    setMailing(true);
+    try {
+      const out = await mailLoi({
+        deal: buildDeal(),
+        loi,
+        recipient: mailRecipient,
+        draftId: draftId ?? undefined,
+      });
+      alert(
+        `LOI mailed via PostGrid (${out.mode === 'live' ? 'LIVE' : 'TEST'} mode).\n` +
+        `Letter ID: ${out.postgrid.id}\nStatus: ${out.postgrid.status}`
+      );
+      setMailOpen(false);
+      if (status === 'draft') setStatus('sent');
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setMailing(false);
+    }
   }
 
   function toggleDd(item: string) {
@@ -255,6 +306,14 @@ export default function Loi() {
             >
               {downloading ? 'Generating…' : 'Download PDF'}
             </button>
+            <button
+              onClick={openMailComposer}
+              disabled={!loaded || mailing || !dealContext.address}
+              title="Mail this LOI via PostGrid (uses current dev/live mode)"
+              className="px-5 py-2 rounded border border-blue-500 text-blue-100 hover:bg-blue-500/20 disabled:opacity-40 font-semibold text-sm"
+            >
+              {mailing ? 'Mailing…' : 'Mail via PostGrid'}
+            </button>
             {draftId && (
               <button
                 onClick={onDelete}
@@ -284,6 +343,78 @@ export default function Loi() {
         {error && (
           <div className="p-3 rounded border border-rose-500/40 bg-rose-500/10 text-rose-200 text-sm mb-6">
             {error}
+          </div>
+        )}
+
+        {mailOpen && (
+          <div className="p-4 rounded-xl border border-blue-700 bg-slate-900 mb-6">
+            <div className="flex items-baseline justify-between mb-3">
+              <h3 className="text-lg font-semibold">Mail LOI via PostGrid</h3>
+              <button onClick={() => setMailOpen(false)} className="text-xs text-slate-400 hover:underline">
+                Cancel
+              </button>
+            </div>
+            <p className="text-sm text-slate-400 mb-3">
+              The PDF you'd download is sent directly to PostGrid as the letter content. Confirm the recipient address; this is what will be printed on the envelope.
+              {' '}Mode is controlled by the global <span className="font-semibold">DEV/LIVE</span> toggle (Ctrl+Alt+D).
+            </p>
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <label className="col-span-2">
+                <div className="text-xs text-slate-400 mb-1">Company / addressee (optional)</div>
+                <input value={mailRecipient.companyName ?? ''}
+                  onChange={(e) => setMailRecipient({ ...mailRecipient, companyName: e.target.value })}
+                  placeholder={loi.sellerEntity || 'Owner LLC'}
+                  className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-sm" />
+              </label>
+              <label>
+                <div className="text-xs text-slate-400 mb-1">First name</div>
+                <input value={mailRecipient.firstName ?? ''}
+                  onChange={(e) => setMailRecipient({ ...mailRecipient, firstName: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-sm" />
+              </label>
+              <label>
+                <div className="text-xs text-slate-400 mb-1">Last name</div>
+                <input value={mailRecipient.lastName ?? ''}
+                  onChange={(e) => setMailRecipient({ ...mailRecipient, lastName: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-sm" />
+              </label>
+              <label className="col-span-2">
+                <div className="text-xs text-slate-400 mb-1">Address line 1 *</div>
+                <input value={mailRecipient.addressLine1}
+                  onChange={(e) => setMailRecipient({ ...mailRecipient, addressLine1: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-sm" />
+              </label>
+              <label className="col-span-2">
+                <div className="text-xs text-slate-400 mb-1">Address line 2</div>
+                <input value={mailRecipient.addressLine2 ?? ''}
+                  onChange={(e) => setMailRecipient({ ...mailRecipient, addressLine2: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-sm" />
+              </label>
+              <label>
+                <div className="text-xs text-slate-400 mb-1">City *</div>
+                <input value={mailRecipient.city}
+                  onChange={(e) => setMailRecipient({ ...mailRecipient, city: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-sm" />
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <label>
+                  <div className="text-xs text-slate-400 mb-1">State *</div>
+                  <input value={mailRecipient.provinceOrState}
+                    onChange={(e) => setMailRecipient({ ...mailRecipient, provinceOrState: e.target.value.toUpperCase().slice(0, 2) })}
+                    className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-sm uppercase" />
+                </label>
+                <label>
+                  <div className="text-xs text-slate-400 mb-1">ZIP *</div>
+                  <input value={mailRecipient.postalOrZip}
+                    onChange={(e) => setMailRecipient({ ...mailRecipient, postalOrZip: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-sm" />
+                </label>
+              </div>
+            </div>
+            <button onClick={onMail} disabled={mailing}
+              className="mt-4 px-4 py-2 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm">
+              {mailing ? 'Mailing…' : 'Render LOI + send via PostGrid'}
+            </button>
           </div>
         )}
 

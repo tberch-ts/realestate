@@ -513,6 +513,25 @@ export async function sendPostGridLetterToContact(input: {
   return res.json();
 }
 
+export async function mailLoi(input: {
+  deal: DealInput;
+  loi: LoiInput;
+  recipient?: PostGridAddress;
+  contactId?: number;
+  draftId?: number;
+}): Promise<{ letter: Letter; postgrid: { id: string; status: string; live: boolean }; mode: 'live' | 'test' }> {
+  const res = await apiFetch(`${BASE}/api/postgrid/letters/loi`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`mail LOI: ${res.status} — ${err.slice(0, 300)}`);
+  }
+  return res.json();
+}
+
 export async function listLettersForContact(contactId: number): Promise<Letter[]> {
   const url = new URL(`${BASE}/api/postgrid/letters`, typeof window !== 'undefined' ? window.location.origin : undefined);
   url.searchParams.set('contactId', String(contactId));

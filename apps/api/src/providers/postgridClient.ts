@@ -99,6 +99,49 @@ export async function createLetter(input: CreateLetterInput): Promise<PostGridLe
   return JSON.parse(raw) as PostGridLetterResponse;
 }
 
+// Create a letter from a binary PDF buffer. Uses PostGrid's multipart/form-data
+// path: 'pdf' field carries the file directly. addressPlacement defaults to
+// 'insert_blank_page' since LOI PDFs typically already have their own letterhead
+// — we don't want PostGrid stamping the address on top of the LOI's first page.
+export async function createLetterFromPdfBuffer(
+  input: Omit<CreateLetterInput, 'html' | 'pdfUrl' | 'templateId'> & { pdf: Buffer; pdfFilename?: string },
+): Promise<PostGridLetterResponse> {
+  const form = new FormData();
+  const addr = (k: 'to' | 'from') => {
+    const a = input[k];
+    return { ...a, countryCode: a.countryCode ?? 'US' };
+  };
+  // PostGrid expects flattened to[firstName], from[city], etc. for multipart.
+  for (const which of ['to', 'from'] as const) {
+    const a = addr(which);
+    for (const [k, v] of Object.entries(a)) {
+      if (v !== undefined && v !== null) form.append(`${which}[${k}]`, String(v));
+    }
+  }
+  form.append('color', String(input.color ?? false));
+  form.append('doubleSided', String(input.doubleSided ?? false));
+  form.append('mailingClass', input.mailingClass ?? 'first_class');
+  form.append('addressPlacement', input.addressPlacement ?? 'insert_blank_page');
+  if (input.description) form.append('description', input.description.slice(0, 500));
+  if (input.metadata) {
+    for (const [k, v] of Object.entries(input.metadata)) form.append(`metadata[${k}]`, v);
+  }
+  // Wrap the buffer as a Blob (Node 20 has both globally).
+  const blob = new Blob([new Uint8Array(input.pdf)], { type: 'application/pdf' });
+  form.append('pdf', blob, input.pdfFilename ?? 'letter.pdf');
+
+  const res = await fetch(`${BASE_URL}/print-mail/v1/letters`, {
+    method: 'POST',
+    headers: { 'x-api-key': apiKey() },  // do NOT set content-type — fetch sets it w/ boundary
+    body: form,
+  });
+  const raw = await res.text();
+  if (!res.ok) {
+    throw new Error(`PostGrid createLetter (PDF) ${res.status}: ${raw.slice(0, 300)}`);
+  }
+  return JSON.parse(raw) as PostGridLetterResponse;
+}
+
 export async function getLetter(letterId: string): Promise<PostGridLetterResponse> {
   const res = await fetch(`${BASE_URL}/print-mail/v1/letters/${encodeURIComponent(letterId)}`, {
     headers: { 'x-api-key': apiKey() },
