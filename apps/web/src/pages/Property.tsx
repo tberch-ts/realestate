@@ -4,6 +4,7 @@ import type { PropertySnapshot } from '@mfa/shared';
 import { fetchProperty } from '../lib/api';
 import ProviderPanel from '../components/ProviderPanel';
 import BuyBoxCard from '../components/BuyBoxCard';
+import SponsorsInCityPanel from '../components/SponsorsInCityPanel';
 
 export default function Property() {
   const [params] = useSearchParams();
@@ -125,6 +126,11 @@ export default function Property() {
                 </dl>
               </ProviderPanel>
             </div>
+
+            <SponsorsInCityPanel
+              city={snapshot.geocode.data?.components?.locality}
+              stateCode={snapshot.geocode.data?.stateCode}
+            />
           </>
         )}
       </div>
