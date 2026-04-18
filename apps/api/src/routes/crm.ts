@@ -16,6 +16,8 @@ import {
 } from '../db/contactLinksRepo.js';
 import type { PropertyRelation, FilingRelation } from '../db/contactLinksRepo.js';
 import { getFormDDetail } from '../providers/edgarFormD.js';
+import { fetchDenverOwners } from '../providers/denverPortfolio.js';
+import { matchScore } from '../providers/nameMatch.js';
 
 export const crmRouter = Router();
 
@@ -188,8 +190,33 @@ crmRouter.get('/properties/:propertyRef/contacts', async (req, res) => {
   }
 });
 
+// Helper: scan Denver portfolio for owners whose name matches a contact name,
+// return matching properties (parcelId + address + units). Best-effort: silently
+// returns empty on fetch failure.
+async function matchContactToPortfolio(contactName: string): Promise<
+  Array<{ propertyRef: string; ownerName: string; score: number; units: number; address: string }>
+> {
+  try {
+    const data = await fetchDenverOwners({ limit: 500 });
+    if (data.status !== 'ok' || !data.data) return [];
+    const clusters = data.data.clusters;
+    const matches: Array<{ propertyRef: string; ownerName: string; score: number; units: number; address: string }> = [];
+    for (const c of clusters) {
+      const score = matchScore(contactName, c.owner);
+      if (score >= 80) {
+        for (const p of c.properties) {
+          const ref = p.parcelId ? `parcel:${p.parcelId}` : `addr:${p.address.toLowerCase()}`;
+          matches.push({ propertyRef: ref, ownerName: c.owner, score, units: p.units ?? 0, address: p.address });
+        }
+      }
+    }
+    return matches;
+  } catch { return []; }
+}
+
 // Import-from-filing: given a Form D accession, auto-create contacts for each related person
 // plus the issuer, link them to the filing. Idempotent via (source, source_ref).
+// Also scans the Denver portfolio for matching owner names and auto-creates property links.
 crmRouter.post('/contacts/from-form-d', async (req, res) => {
   try {
     const { accession, cik } = req.body ?? {};
@@ -197,7 +224,16 @@ crmRouter.post('/contacts/from-form-d', async (req, res) => {
     const detail = await getFormDDetail(accession, cik);
     if (!detail) { res.status(404).json({ error: 'filing not found' }); return; }
 
-    const created: { contactId: number; name: string; relation: FilingRelation }[] = [];
+    const created: { contactId: number; name: string; relation: FilingRelation; portfolioMatches: number }[] = [];
+
+    async function autoLinkPortfolio(contactId: number, name: string): Promise<number> {
+      const matches = await matchContactToPortfolio(name);
+      for (const m of matches) {
+        await linkContactProperty(contactId, m.propertyRef, 'owner',
+          `Auto-matched from Denver portfolio (score ${m.score}). ${m.units} units at ${m.address}.`);
+      }
+      return matches.length;
+    }
 
     // Issuer: firm contact
     const issuerRef = `form_d:${accession}:issuer`;
@@ -221,7 +257,8 @@ crmRouter.post('/contacts/from-form-d', async (req, res) => {
     }
     if (issuer) {
       await linkContactFiling(issuer.id, accession, cik, 'issuer');
-      created.push({ contactId: issuer.id, name: issuer.name, relation: 'issuer' });
+      const portfolioMatches = await autoLinkPortfolio(issuer.id, issuer.name);
+      created.push({ contactId: issuer.id, name: issuer.name, relation: 'issuer', portfolioMatches });
     }
 
     // Related persons: one contact per person/firm
@@ -250,11 +287,52 @@ crmRouter.post('/contacts/from-form-d', async (req, res) => {
         : primary.includes('officer')  ? 'officer'
         : 'other';
       await linkContactFiling(c.id, accession, cik, relation);
-      created.push({ contactId: c.id, name: c.name, relation });
+      // Only firms are likely to own properties; skip portfolio match for individuals to cut calls.
+      const portfolioMatches = c.kind === 'firm' ? await autoLinkPortfolio(c.id, c.name) : 0;
+      created.push({ contactId: c.id, name: c.name, relation, portfolioMatches });
     }
 
     res.status(201).json({ created });
   } catch (err) {
     res.status(500).json({ error: 'from_form_d_failed', message: (err as Error).message });
+  }
+});
+
+// Retroactively match a single contact to Denver portfolio owners.
+crmRouter.post('/contacts/:id/match-portfolio', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const contact = await getContact(id);
+    if (!contact) { res.status(404).json({ error: 'not_found' }); return; }
+    const matches = await matchContactToPortfolio(contact.name);
+    for (const m of matches) {
+      await linkContactProperty(id, m.propertyRef, 'owner',
+        `Matched from Denver portfolio (score ${m.score}). ${m.units} units at ${m.address}.`);
+    }
+    res.json({ contactId: id, matches: matches.length, details: matches });
+  } catch (err) {
+    res.status(500).json({ error: 'match_portfolio_failed', message: (err as Error).message });
+  }
+});
+
+// Batch re-match all firm contacts (not just Form-D-sourced). Idempotent.
+crmRouter.post('/match-portfolio-all', async (_req, res) => {
+  try {
+    const firms = await listContacts({ status: 'active', limit: 2000 });
+    const onlyFirms = firms.filter((c) => c.kind === 'firm');
+    let totalLinks = 0;
+    const perContact: Array<{ id: number; name: string; matches: number }> = [];
+    for (const c of onlyFirms) {
+      const matches = await matchContactToPortfolio(c.name);
+      for (const m of matches) {
+        await linkContactProperty(c.id, m.propertyRef, 'owner',
+          `Matched from Denver portfolio (score ${m.score}). ${m.units} units at ${m.address}.`);
+      }
+      totalLinks += matches.length;
+      if (matches.length > 0) perContact.push({ id: c.id, name: c.name, matches: matches.length });
+    }
+    res.json({ firmsScanned: onlyFirms.length, totalLinks, perContact });
+  } catch (err) {
+    res.status(500).json({ error: 'batch_match_failed', message: (err as Error).message });
   }
 });

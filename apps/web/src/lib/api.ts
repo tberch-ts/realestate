@@ -394,7 +394,7 @@ export async function patchFollowUp(id: number, patch: Partial<FollowUp>): Promi
 }
 
 export async function importContactsFromFormD(accession: string, cik: string): Promise<{
-  created: Array<{ contactId: number; name: string; relation: string }>;
+  created: Array<{ contactId: number; name: string; relation: string; portfolioMatches: number }>;
 }> {
   const res = await fetch(`${BASE}/api/crm/contacts/from-form-d`, {
     method: 'POST',
@@ -402,5 +402,25 @@ export async function importContactsFromFormD(accession: string, cik: string): P
     body: JSON.stringify({ accession, cik }),
   });
   if (!res.ok) throw new Error(`import form-d: ${res.status}`);
+  return res.json();
+}
+
+export async function matchContactToPortfolio(id: number): Promise<{
+  contactId: number;
+  matches: number;
+  details: Array<{ propertyRef: string; ownerName: string; score: number; units: number; address: string }>;
+}> {
+  const res = await fetch(`${BASE}/api/crm/contacts/${id}/match-portfolio`, { method: 'POST' });
+  if (!res.ok) throw new Error(`match-portfolio: ${res.status}`);
+  return res.json();
+}
+
+export async function matchAllToPortfolio(): Promise<{
+  firmsScanned: number;
+  totalLinks: number;
+  perContact: Array<{ id: number; name: string; matches: number }>;
+}> {
+  const res = await fetch(`${BASE}/api/crm/match-portfolio-all`, { method: 'POST' });
+  if (!res.ok) throw new Error(`match-portfolio-all: ${res.status}`);
   return res.json();
 }

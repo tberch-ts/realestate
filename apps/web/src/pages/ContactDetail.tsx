@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
-  getContact, createInteraction, createFollowUp, patchFollowUp,
+  getContact, createInteraction, createFollowUp, patchFollowUp, matchContactToPortfolio,
   type ContactDetail as Detail, type InteractionKind,
 } from '../lib/api';
 
@@ -61,6 +61,18 @@ export default function ContactDetailPage() {
     catch (e) { alert(`Failed: ${(e as Error).message}`); }
   }
 
+  async function runPortfolioMatch() {
+    try {
+      const out = await matchContactToPortfolio(cid);
+      if (out.matches === 0) {
+        alert('No matches in Denver portfolio for this contact.');
+      } else {
+        alert(`Matched ${out.matches} properties in Denver portfolio.`);
+        load();
+      }
+    } catch (e) { alert(`Failed: ${(e as Error).message}`); }
+  }
+
   if (err) return <div className="p-8 text-rose-400">Error: {err}</div>;
   if (!data) return <div className="p-8 text-slate-400">Loading…</div>;
 
@@ -104,6 +116,14 @@ export default function ContactDetailPage() {
             <div className="text-xs text-slate-500 text-right">
               Created {new Date(c.createdAt).toLocaleDateString()}<br />
               Updated {new Date(c.updatedAt).toLocaleDateString()}
+              {c.kind === 'firm' && (
+                <button
+                  onClick={runPortfolioMatch}
+                  className="mt-3 block bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded px-2 py-1 text-xs"
+                >
+                  Match Denver portfolio →
+                </button>
+              )}
             </div>
           </div>
         </div>
