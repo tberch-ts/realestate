@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { LoiDraft } from '@mfa/shared';
-import { deleteDraft, listDrafts } from '../lib/api';
+import { deleteDraft, listDrafts, listFollowUps, patchFollowUp, type FollowUp } from '../lib/api';
 import { API_URL as API_BASE } from '../lib/runtimeEnv';
 
 interface RankedZone {
@@ -20,6 +20,7 @@ export default function Home() {
   const [zonesError, setZonesError] = useState<string | null>(null);
   const [zonesLoading, setZonesLoading] = useState(true);
   const [drafts, setDrafts] = useState<LoiDraft[] | null>(null);
+  const [followUps, setFollowUps] = useState<FollowUp[] | null>(null);
 
   useEffect(() => {
     fetch(`${API_BASE}/api/hotspots/denver/ranked?limit=10`)
@@ -30,7 +31,18 @@ export default function Home() {
 
     // LOI drafts — best-effort. If Postgres is down, just show nothing.
     listDrafts('draft').then(setDrafts).catch(() => setDrafts([]));
+    // Follow-ups (next 14 days) — best-effort.
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() + 14);
+    listFollowUps({ status: 'open', dueBefore: cutoff.toISOString().slice(0, 10), limit: 10 })
+      .then(setFollowUps).catch(() => setFollowUps([]));
   }, []);
+
+  async function markFollowUpDone(id: number) {
+    try {
+      await patchFollowUp(id, { status: 'done' });
+      setFollowUps((prev) => (prev ?? []).filter((f) => f.id !== id));
+    } catch { /* silent */ }
+  }
 
   async function handleDeleteDraft(id: number) {
     if (!confirm('Delete this LOI draft?')) return;
@@ -92,7 +104,38 @@ export default function Home() {
           <Link to="/deal" className="hover:text-indigo-300 underline">
             New blank deal →
           </Link>
+          <Link to="/contacts" className="hover:text-indigo-300 underline">
+            Contacts →
+          </Link>
+          <Link to="/filings" className="hover:text-indigo-300 underline">
+            SEC Form D →
+          </Link>
         </div>
+
+        {followUps && followUps.length > 0 && (
+          <section className="mb-8 bg-slate-900 border border-slate-800 rounded p-5">
+            <div className="flex items-baseline gap-3 mb-3">
+              <h2 className="text-lg font-semibold">Upcoming follow-ups</h2>
+              <span className="text-xs text-slate-500">next 14 days · {followUps.length} open</span>
+            </div>
+            <ul className="divide-y divide-slate-800">
+              {followUps.map((f) => (
+                <li key={f.id} className="py-2 flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    onChange={() => markFollowUpDone(f.id)}
+                    className="mt-0.5"
+                  />
+                  <span className="text-xs text-slate-500 w-24">{f.dueDate}</span>
+                  <Link to={`/contact/${f.contactId}`} className="text-sm text-slate-300 hover:underline w-64 truncate">
+                    {f.contactName ?? 'Contact'}
+                  </Link>
+                  <span className="text-sm text-slate-400 flex-1 truncate">{f.subject}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {drafts && drafts.length > 0 && (
           <section className="mb-8">

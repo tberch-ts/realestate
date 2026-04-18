@@ -11,6 +11,9 @@ import Hotspots from './pages/Hotspots';
 import Followup from './pages/Followup';
 import Portfolio from './pages/Portfolio';
 import Owner from './pages/Owner';
+import Filings from './pages/Filings';
+import Contacts from './pages/Contacts';
+import ContactDetail from './pages/ContactDetail';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
@@ -25,6 +28,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <Route path="/followup" element={<Followup />} />
         <Route path="/portfolio" element={<Portfolio />} />
         <Route path="/owner" element={<Owner />} />
+        <Route path="/filings" element={<Filings />} />
+        <Route path="/contacts" element={<Contacts />} />
+        <Route path="/contact/:id" element={<ContactDetail />} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>

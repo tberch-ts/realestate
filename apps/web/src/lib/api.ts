@@ -184,3 +184,223 @@ export async function downloadLoi(deal: DealInput, loi: LoiInput): Promise<void>
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
+// ---- SEC EDGAR Form D ----
+
+export interface FormDSummary {
+  accessionNumber: string;
+  cik: string;
+  filingDate: string;
+  form: string;
+  issuerName: string;
+  issuerState?: string;
+  issuerLocation?: string;
+  incState?: string;
+}
+
+export interface FormDDetail extends FormDSummary {
+  issuerAddress?: { street1?: string; street2?: string; city?: string; state?: string; zip?: string };
+  issuerPhone?: string;
+  entityType?: string;
+  jurisdictionOfInc?: string;
+  industryGroupType?: string;
+  totalOfferingAmount?: string;
+  totalAmountSold?: number;
+  totalRemaining?: string;
+  minimumInvestment?: number;
+  investorCount?: number;
+  hasNonAccreditedInvestors?: boolean;
+  dateOfFirstSale?: string;
+  relatedPersons?: Array<{
+    name: string;
+    relationship: string[];
+    clarification?: string;
+    address?: { city?: string; state?: string; zip?: string };
+  }>;
+}
+
+export async function listFormDFilings(opts: {
+  state?: string; keyword?: string; dateFrom?: string; dateTo?: string; limit?: number;
+} = {}): Promise<FormDSummary[]> {
+  const url = new URL(`${BASE}/api/filings/form-d`, typeof window !== 'undefined' ? window.location.origin : undefined);
+  if (opts.state)    url.searchParams.set('state', opts.state);
+  if (opts.keyword)  url.searchParams.set('keyword', opts.keyword);
+  if (opts.dateFrom) url.searchParams.set('dateFrom', opts.dateFrom);
+  if (opts.dateTo)   url.searchParams.set('dateTo', opts.dateTo);
+  if (opts.limit)    url.searchParams.set('limit', String(opts.limit));
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`filings list: ${res.status}`);
+  return (await res.json()).data as FormDSummary[];
+}
+
+export async function getFormDFiling(accession: string, cik: string): Promise<FormDDetail> {
+  const url = new URL(`${BASE}/api/filings/form-d/${encodeURIComponent(accession)}`, typeof window !== 'undefined' ? window.location.origin : undefined);
+  url.searchParams.set('cik', cik);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`filing detail: ${res.status}`);
+  return (await res.json()).data as FormDDetail;
+}
+
+// ---- CRM ----
+
+export type ContactKind = 'person' | 'firm';
+export type ContactSource = 'manual' | 'form_d' | 'portfolio' | 'owner' | 'loi';
+export type ContactStatus = 'active' | 'archived';
+export type InteractionKind = 'call' | 'email' | 'meeting' | 'note' | 'outreach_sent' | 'reply_received';
+export type FollowUpStatus = 'open' | 'done' | 'skipped' | 'snoozed';
+
+export interface Contact {
+  id: number;
+  kind: ContactKind;
+  name: string;
+  firmName?: string;
+  email?: string;
+  phone?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  stateCode?: string;
+  zip?: string;
+  notes?: string;
+  source: ContactSource;
+  sourceRef?: string;
+  tags: string[];
+  status: ContactStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Interaction {
+  id: number;
+  contactId: number;
+  occurredAt: string;
+  kind: InteractionKind;
+  subject?: string;
+  body?: string;
+  createdAt: string;
+}
+
+export interface FollowUp {
+  id: number;
+  contactId: number;
+  dueDate: string;
+  subject: string;
+  notes?: string;
+  status: FollowUpStatus;
+  completedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  contactName?: string;
+}
+
+export interface ContactDetail {
+  contact: Contact;
+  interactions: Interaction[];
+  followUps: FollowUp[];
+  properties: Array<{ contactId: number; propertyRef: string; relation: string; notes?: string }>;
+  filings: Array<{ contactId: number; accessionNumber: string; cik?: string; relation: string; notes?: string }>;
+}
+
+export async function listContacts(opts: {
+  status?: ContactStatus | 'all'; source?: ContactSource; search?: string; limit?: number;
+} = {}): Promise<Contact[]> {
+  const url = new URL(`${BASE}/api/crm/contacts`, typeof window !== 'undefined' ? window.location.origin : undefined);
+  if (opts.status) url.searchParams.set('status', opts.status);
+  if (opts.source) url.searchParams.set('source', opts.source);
+  if (opts.search) url.searchParams.set('search', opts.search);
+  if (opts.limit)  url.searchParams.set('limit', String(opts.limit));
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`list contacts: ${res.status}`);
+  return (await res.json()).data as Contact[];
+}
+
+export async function getContact(id: number): Promise<ContactDetail> {
+  const res = await fetch(`${BASE}/api/crm/contacts/${id}`);
+  if (!res.ok) throw new Error(`get contact: ${res.status}`);
+  return res.json();
+}
+
+export async function createContact(input: Partial<Contact> & { kind: ContactKind; name: string }): Promise<Contact> {
+  const res = await fetch(`${BASE}/api/crm/contacts`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(`create contact: ${res.status}`);
+  return res.json();
+}
+
+export async function patchContact(id: number, patch: Partial<Contact>): Promise<Contact> {
+  const res = await fetch(`${BASE}/api/crm/contacts/${id}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error(`patch contact: ${res.status}`);
+  return res.json();
+}
+
+export async function deleteContact(id: number): Promise<void> {
+  const res = await fetch(`${BASE}/api/crm/contacts/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`delete contact: ${res.status}`);
+}
+
+export async function createInteraction(
+  contactId: number,
+  input: { kind: InteractionKind; subject?: string; body?: string; occurredAt?: string }
+): Promise<Interaction> {
+  const res = await fetch(`${BASE}/api/crm/contacts/${contactId}/interactions`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(`create interaction: ${res.status}`);
+  return res.json();
+}
+
+export async function listFollowUps(opts: {
+  status?: FollowUpStatus | 'all'; dueBefore?: string; limit?: number;
+} = {}): Promise<FollowUp[]> {
+  const url = new URL(`${BASE}/api/crm/follow-ups`, typeof window !== 'undefined' ? window.location.origin : undefined);
+  if (opts.status)    url.searchParams.set('status', opts.status);
+  if (opts.dueBefore) url.searchParams.set('dueBefore', opts.dueBefore);
+  if (opts.limit)     url.searchParams.set('limit', String(opts.limit));
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`list follow-ups: ${res.status}`);
+  return (await res.json()).data as FollowUp[];
+}
+
+export async function createFollowUp(
+  contactId: number,
+  input: { dueDate: string; subject: string; notes?: string }
+): Promise<FollowUp> {
+  const res = await fetch(`${BASE}/api/crm/contacts/${contactId}/follow-ups`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(`create follow-up: ${res.status}`);
+  return res.json();
+}
+
+export async function patchFollowUp(id: number, patch: Partial<FollowUp>): Promise<FollowUp> {
+  const res = await fetch(`${BASE}/api/crm/follow-ups/${id}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error(`patch follow-up: ${res.status}`);
+  return res.json();
+}
+
+export async function importContactsFromFormD(accession: string, cik: string): Promise<{
+  created: Array<{ contactId: number; name: string; relation: string }>;
+}> {
+  const res = await fetch(`${BASE}/api/crm/contacts/from-form-d`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ accession, cik }),
+  });
+  if (!res.ok) throw new Error(`import form-d: ${res.status}`);
+  return res.json();
+}
