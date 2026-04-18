@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import type { FollowupResult, FollowupScored } from '@mfa/shared';
 import { fetchFollowup } from '../lib/api';
 import { loadGoogleMaps } from '../lib/googleMaps';
@@ -8,6 +8,8 @@ import { API_URL as API_BASE, GOOGLE_MAPS_API_KEY as MAPS_KEY } from '../lib/run
 const DENVER_CENTER = { lat: 39.7392, lng: -104.9903 };
 
 export default function Hotspots() {
+  const [searchParams] = useSearchParams();
+  const focusZone = searchParams.get('focus');
   const mapDiv = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -86,6 +88,32 @@ export default function Hotspots() {
             rentBurdenedPct: toNum(f.getProperty('rentBurdenedPct')),
           });
         });
+
+        // Deep-link via ?focus=NAME — find the matching feature, fit bounds,
+        // select it so the sidebar is populated on first render.
+        if (focusZone) {
+          const target = findFeatureByName(map.data, focusZone);
+          if (target) {
+            const bounds = new maps.LatLngBounds();
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            target.getGeometry().forEachLatLng((ll: any) => bounds.extend(ll));
+            map.fitBounds(bounds, 64); // 64px padding
+            setSelected({
+              name: String(target.getProperty('nbhd_name') ?? focusZone),
+              score: Number(target.getProperty('score') ?? 0),
+              medianIncome: toNum(target.getProperty('medianIncome')),
+              medianRent: toNum(target.getProperty('medianRent')),
+              population: toNum(target.getProperty('population')),
+              rentBurdenedPct: toNum(target.getProperty('rentBurdenedPct')),
+            });
+            // Visual highlight: thicker stroke on the focused polygon.
+            map.data.overrideStyle(target, {
+              strokeColor: '#f8fafc',
+              strokeWeight: 3,
+              zIndex: 10,
+            });
+          }
+        }
       } catch (err) {
         if (cancelled) return;
         setError((err as Error).message);
@@ -322,6 +350,20 @@ function scoreTextColor(score: number): string {
   if (score >= 60) return 'text-amber-200';
   if (score >= 40) return 'text-orange-300';
   return 'text-slate-400';
+}
+
+// Case-insensitive match across the Data layer features on the nbhd_name property.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function findFeatureByName(data: any, name: string): any | null {
+  const needle = name.toLowerCase();
+  let match: any | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  data.forEach((f: any) => {
+    if (match) return;
+    const n = String(f.getProperty('nbhd_name') ?? '').toLowerCase();
+    if (n === needle) match = f;
+  });
+  return match;
 }
 
 function toNum(v: unknown): number | undefined {
