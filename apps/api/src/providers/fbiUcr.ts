@@ -151,18 +151,18 @@ export async function fetchCrime(
   }
 
   const state = geocode.stateCode;
-  if (state !== 'CO') {
+  if (!state || state.length !== 2) {
     return {
       provider,
       status: 'not_available',
-      message: `No FBI agency index cached for state=${state}. v1 covers Colorado only.`,
+      message: 'No usable stateCode on the geocode result',
       data: { nationalAverageRate: NATIONAL_VIOLENT_RATE },
     };
   }
 
   const index = await loadAgencyIndex(state, key);
   if (!index) {
-    return { provider, status: 'error', message: 'Failed to load FBI agency index for CO' };
+    return { provider, status: 'error', message: `Failed to load FBI agency index for ${state}` };
   }
 
   const agency = resolveAgency(geocode, index);

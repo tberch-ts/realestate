@@ -4,7 +4,7 @@ import type { GeocodedAddress, LandlordRecord, ProviderResult } from '@mfa/share
 // Based on widely-cited indicators: presence of statewide rent control,
 // eviction timelines, security deposit caps, notice periods, tenant-screening freedom,
 // implied warranty of habitability strictness. Not legal advice.
-const STATE_TABLE: Record<
+export const STATE_TABLE: Record<
   string,
   { score: number; tier: LandlordRecord['stateTier']; notes?: string }
 > = {
