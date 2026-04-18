@@ -62,7 +62,7 @@ export async function fetchOwners(opts: {
   search?: string;
   limit?: number;
 } = {}): Promise<OwnerCluster[]> {
-  const url = new URL(`${BASE}/api/portfolio/denver/owners`);
+  const url = new URL(`${BASE}/api/portfolio/denver/owners`, typeof window !== "undefined" ? window.location.origin : undefined);
   if (opts.outOfState) url.searchParams.set('outOfState', '1');
   if (opts.search) url.searchParams.set('search', opts.search);
   if (opts.limit) url.searchParams.set('limit', String(opts.limit));
@@ -73,7 +73,7 @@ export async function fetchOwners(opts: {
 }
 
 export async function fetchOwner(name: string): Promise<OwnerCluster> {
-  const url = new URL(`${BASE}/api/portfolio/denver/owner`);
+  const url = new URL(`${BASE}/api/portfolio/denver/owner`, typeof window !== "undefined" ? window.location.origin : undefined);
   url.searchParams.set('name', name);
   const res = await fetch(url);
   if (!res.ok) throw new Error(`API ${res.status}`);
@@ -82,7 +82,7 @@ export async function fetchOwner(name: string): Promise<OwnerCluster> {
 }
 
 export async function fetchSosEntity(name: string): Promise<SosEntity | null> {
-  const url = new URL(`${BASE}/api/sos/entity`);
+  const url = new URL(`${BASE}/api/sos/entity`, typeof window !== "undefined" ? window.location.origin : undefined);
   url.searchParams.set('name', name);
   const res = await fetch(url);
   if (!res.ok) throw new Error(`API ${res.status}`);
@@ -96,7 +96,7 @@ export async function fetchFollowup(
   zone: string,
   opts: { minUnits?: number; minYear?: number; limit?: number } = {}
 ): Promise<FollowupResult> {
-  const url = new URL(`${BASE}/api/followup/denver`);
+  const url = new URL(`${BASE}/api/followup/denver`, typeof window !== "undefined" ? window.location.origin : undefined);
   url.searchParams.set('zone', zone);
   if (opts.minUnits) url.searchParams.set('minUnits', String(opts.minUnits));
   if (opts.minYear) url.searchParams.set('minYear', String(opts.minYear));
@@ -111,7 +111,7 @@ export async function fetchFollowup(
 }
 
 export async function fetchProperty(address: string): Promise<PropertySnapshot> {
-  const url = new URL(`${BASE}/api/property`);
+  const url = new URL(`${BASE}/api/property`, typeof window !== "undefined" ? window.location.origin : undefined);
   url.searchParams.set('address', address);
   const res = await fetch(url);
   if (!res.ok) throw new Error(`API ${res.status}`);
