@@ -19,6 +19,7 @@ import { followupRouter } from './routes/followup.js';
 import { portfolioRouter } from './routes/portfolio.js';
 import { sosRouter } from './routes/sos.js';
 import { marketsRouter } from './routes/markets.js';
+import { filingsRouter } from './routes/filings.js';
 import { warmDenverHotspots } from './providers/denverNeighborhoods.js';
 import { warmDenverPortfolio } from './providers/denverPortfolio.js';
 
@@ -43,6 +44,7 @@ app.use('/api/followup', followupRouter);
 app.use('/api/portfolio', portfolioRouter);
 app.use('/api/sos', sosRouter);
 app.use('/api/markets', marketsRouter);
+app.use('/api/filings', filingsRouter);
 
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('[api] unhandled error:', err);
