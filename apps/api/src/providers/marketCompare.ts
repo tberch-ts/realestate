@@ -10,8 +10,9 @@ import { STATE_TABLE } from './landlordFriendliness.js';
 interface MetroDef {
   name: string;
   state: string;
-  city: string;          // exactly as appears in FBI agency_name (without 'Police Department')
+  city: string;          // matches FBI agency_name (without 'Police Department') when possible
   countyFips: string;    // 5-digit Census FIPS for the largest county
+  oriOverride?: { ori: string; label: string }; // for agencies that don't follow "{City} Police Department" naming
 }
 
 export const METROS: MetroDef[] = [
@@ -29,11 +30,14 @@ export const METROS: MetroDef[] = [
   // Sun Belt analogs
   { name: 'Phoenix',          state: 'AZ', city: 'Phoenix',          countyFips: '04013' },
   { name: 'Tucson',           state: 'AZ', city: 'Tucson',           countyFips: '04019' },
-  { name: 'Las Vegas',        state: 'NV', city: 'Las Vegas',        countyFips: '32003' },
+  { name: 'Las Vegas',        state: 'NV', city: 'Las Vegas',        countyFips: '32003',
+    oriOverride: { ori: 'NV0020100', label: 'Las Vegas Metropolitan Police Department' } },
   { name: 'Austin',           state: 'TX', city: 'Austin',           countyFips: '48453' },
   { name: 'San Antonio',      state: 'TX', city: 'San Antonio',      countyFips: '48029' },
-  { name: 'Nashville',        state: 'TN', city: 'Nashville',        countyFips: '47037' },
-  { name: 'Charlotte',        state: 'NC', city: 'Charlotte',        countyFips: '37119' },
+  { name: 'Nashville',        state: 'TN', city: 'Nashville',        countyFips: '47037',
+    oriOverride: { ori: 'TN0190100', label: 'Metropolitan Nashville Police Department' } },
+  { name: 'Charlotte',        state: 'NC', city: 'Charlotte',        countyFips: '37119',
+    oriOverride: { ori: 'NC0600100', label: 'Charlotte-Mecklenburg Police Department' } },
   { name: 'Raleigh',          state: 'NC', city: 'Raleigh',          countyFips: '37183' },
   { name: 'Tampa',            state: 'FL', city: 'Tampa',            countyFips: '12057' },
   // Coastal but profile-similar
@@ -187,21 +191,24 @@ async function fetchMetro(m: MetroDef): Promise<MarketRow> {
   const census = await fetchCensusCounty(stateFips, countyFips).catch(() => null);
   if (!census) errors.push('census fetch failed');
 
-  // FBI: get state index, find by city, fetch crime
+  // FBI: prefer the hardcoded ORI override, else look up by city in the state index.
   let crime: { year: number; rate: number } | null = null;
   let crimeJurisdiction: string | undefined;
   const fbiKey = process.env.FBI_API_KEY;
   if (fbiKey) {
-    const idx = await getAgencyIndex(m.state, fbiKey);
-    if (!idx) errors.push(`fbi index ${m.state} unavailable`);
-    else {
-      const agency = idx.byCity[m.city.toLowerCase()];
-      if (!agency) errors.push(`fbi: no PD match for "${m.city}"`);
+    let agency: { ori: string; label: string } | undefined = m.oriOverride;
+    if (!agency) {
+      const idx = await getAgencyIndex(m.state, fbiKey);
+      if (!idx) errors.push(`fbi index ${m.state} unavailable`);
       else {
-        crime = await fetchAgencyCrime(agency.ori, agency.label, fbiKey);
-        crimeJurisdiction = agency.label;
-        if (!crime) errors.push('fbi crime fetch failed');
+        agency = idx.byCity[m.city.toLowerCase()];
+        if (!agency) errors.push(`fbi: no PD match for "${m.city}"`);
       }
+    }
+    if (agency) {
+      crime = await fetchAgencyCrime(agency.ori, agency.label, fbiKey);
+      crimeJurisdiction = agency.label;
+      if (!crime) errors.push('fbi crime fetch failed');
     }
   } else {
     errors.push('no FBI_API_KEY');
@@ -230,45 +237,55 @@ async function fetchMetro(m: MetroDef): Promise<MarketRow> {
 }
 
 // ---- Scoring ----
+// Similarity: how close is this market to Denver's PROFILE (size + income + rent).
+// 100 = identical Denver; drops to 0 as any axis drifts out of range.
 function similarity(a: MarketRow, denver: MarketRow): number {
-  // Lower normalized distance on (log pop, income, rent) -> higher score.
-  const parts: number[] = [];
+  const parts: Array<{ v: number; w: number }> = [];
   if (a.population && denver.population) {
     const dist = Math.abs(Math.log10(a.population) - Math.log10(denver.population));
-    parts.push(Math.max(0, 1 - dist / 0.5)); // within 0.5 log10 = perfect, beyond = 0
+    parts.push({ v: Math.max(0, 1 - dist / 0.5), w: 0.4 });  // within ±3x Denver pop
   }
   if (a.medianIncome && denver.medianIncome) {
     const pct = Math.abs(a.medianIncome - denver.medianIncome) / denver.medianIncome;
-    parts.push(Math.max(0, 1 - pct / 0.4)); // within 40% = score, beyond = 0
+    parts.push({ v: Math.max(0, 1 - pct / 0.4), w: 0.3 });   // within ±40%
   }
   if (a.medianRent && denver.medianRent) {
     const pct = Math.abs(a.medianRent - denver.medianRent) / denver.medianRent;
-    parts.push(Math.max(0, 1 - pct / 0.4));
+    parts.push({ v: Math.max(0, 1 - pct / 0.4), w: 0.3 });
   }
   if (parts.length === 0) return 0;
-  return Math.round((parts.reduce((s, n) => s + n, 0) / parts.length) * 100);
+  const tw = parts.reduce((s, p) => s + p.w, 0);
+  const wsum = parts.reduce((s, p) => s + p.v * p.w, 0);
+  return Math.round((wsum / tw) * 100);
 }
 
+// Investability: centered at 50 = parity with Denver. Each axis can push ±25 from center.
+// Axes (total ±50 possible):
+//   landlord (±20) — state regulatory tilt delta from CO's 55
+//   crime (±20)    — percent lower than Denver's violent crime rate
+//   affordability (±10) — rent/income ratio lower than Denver
+// Result is clamped to [0, 100]. A score of 50 = "same as Denver"; 70 = "materially better";
+// 30 = "materially worse". Keeps dynamic range without saturating the top.
 function investability(a: MarketRow, denver: MarketRow): number {
-  // Higher = friendlier-than-Denver climate. Composite of:
-  // landlord score (state regulatory tilt), inverse crime, lower rent-to-income (affordability).
-  const parts: number[] = [];
-  // Landlord score: 0-100, weight 0.5
-  parts.push(a.landlordScore * 0.5);
-  // Crime: lower than Denver = bonus, capped
+  let score = 50;
+
+  // Landlord: delta in score, mapped to ±20 (max delta ~60 between extremes like AR:90 and NY:28).
+  const landlordDelta = a.landlordScore - denver.landlordScore;
+  score += Math.max(-20, Math.min(20, landlordDelta * (20 / 30))); // 30-point delta -> full 20-point swing
+
+  // Crime: pct-lower than Denver, mapped to ±20 (cap at 2x or 0.5x).
   if (a.violentCrimeRate && denver.violentCrimeRate) {
-    const ratio = a.violentCrimeRate / denver.violentCrimeRate;
-    // ratio 0.5 = +25, ratio 1.0 = 0, ratio 1.5 = -25
-    const crimeBonus = Math.max(-25, Math.min(25, (1 - ratio) * 50));
-    parts.push(crimeBonus + 25); // recenter so 25 is neutral
+    const pctLower = (denver.violentCrimeRate - a.violentCrimeRate) / denver.violentCrimeRate;
+    score += Math.max(-20, Math.min(20, pctLower * 40));  // pctLower=0.5 -> +20
   }
-  // Affordability: lower rentToIncome ratio = bonus
+
+  // Affordability: pct-lower rent/income ratio vs Denver, mapped to ±10.
   if (a.rentToIncomeRatio && denver.rentToIncomeRatio) {
-    const ratio = a.rentToIncomeRatio / denver.rentToIncomeRatio;
-    parts.push(Math.max(-15, Math.min(15, (1 - ratio) * 30)) + 15);
+    const pctLower = (denver.rentToIncomeRatio - a.rentToIncomeRatio) / denver.rentToIncomeRatio;
+    score += Math.max(-10, Math.min(10, pctLower * 40));
   }
-  const total = parts.reduce((s, n) => s + n, 0);
-  return Math.round(Math.max(0, Math.min(100, total)));
+
+  return Math.round(Math.max(0, Math.min(100, score)));
 }
 
 // ---- Public entry: cached 7d ----

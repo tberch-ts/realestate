@@ -27,6 +27,7 @@ export const STATE_TABLE: Record<
   NV: { score: 68, tier: 'moderate' },
   ID: { score: 75, tier: 'friendly' },
   UT: { score: 74, tier: 'friendly' },
+  NM: { score: 70, tier: 'moderate', notes: 'No statewide rent control; 3-day notice for non-payment; moderate tenant protections.' },
   CO: {
     score: 55,
     tier: 'moderate',
