@@ -17,9 +17,12 @@ declare global {
 
 function read(): RuntimeEnv {
   const w = typeof window !== 'undefined' ? window.__ENV__ : undefined;
-  const API_URL = w?.API_URL || (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:4000';
+  // ?? not ||  — empty string from window.__ENV__ is a valid value (means
+  // "use relative URLs"), not a fallback trigger.
+  const API_URL =
+    w?.API_URL ?? (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:4000';
   const GOOGLE_MAPS_API_KEY =
-    w?.GOOGLE_MAPS_API_KEY || (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined) || undefined;
+    w?.GOOGLE_MAPS_API_KEY ?? (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined) ?? undefined;
   return { API_URL, GOOGLE_MAPS_API_KEY };
 }
 
