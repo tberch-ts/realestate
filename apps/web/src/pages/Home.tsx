@@ -110,6 +110,9 @@ export default function Home() {
           <Link to="/filings" className="hover:text-indigo-300 underline">
             SEC Form D →
           </Link>
+          <Link to="/settings" className="hover:text-indigo-300 underline">
+            Settings →
+          </Link>
         </div>
 
         {followUps && followUps.length > 0 && (

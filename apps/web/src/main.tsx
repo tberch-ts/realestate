@@ -14,6 +14,7 @@ import Owner from './pages/Owner';
 import Filings from './pages/Filings';
 import Contacts from './pages/Contacts';
 import ContactDetail from './pages/ContactDetail';
+import Settings from './pages/Settings';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
@@ -31,6 +32,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <Route path="/filings" element={<Filings />} />
         <Route path="/contacts" element={<Contacts />} />
         <Route path="/contact/:id" element={<ContactDetail />} />
+        <Route path="/settings" element={<Settings />} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>

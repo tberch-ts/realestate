@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   getContact, createInteraction, createFollowUp, patchFollowUp, matchContactToPortfolio,
-  type ContactDetail as Detail, type InteractionKind,
+  getPostGridStatus, sendPostGridLetterToContact, listLettersForContact,
+  type ContactDetail as Detail, type InteractionKind, type Letter,
 } from '../lib/api';
 
 const INTERACTION_KINDS: InteractionKind[] = ['call', 'email', 'meeting', 'note', 'outreach_sent', 'reply_received'];
@@ -71,6 +72,14 @@ export default function ContactDetailPage() {
   const [outSubject, setOutSubject] = useState('');
   const [outBody, setOutBody] = useState('');
 
+  // Postal mail composer
+  const [mailOpen, setMailOpen] = useState(false);
+  const [mailSubject, setMailSubject] = useState('');
+  const [mailHtml, setMailHtml] = useState('');
+  const [mailSending, setMailSending] = useState(false);
+  const [mailStatus, setMailStatus] = useState<{ apiKey: boolean; senderConfigured: boolean } | null>(null);
+  const [letters, setLetters] = useState<Letter[]>([]);
+
   // Follow-up form
   const [fuDue, setFuDue] = useState<string>(() => {
     const d = new Date(); d.setDate(d.getDate() + 7);
@@ -84,6 +93,9 @@ export default function ContactDetailPage() {
   async function load() {
     try {
       setData(await getContact(cid));
+      // Also load letters + PostGrid status (best-effort; don't block page)
+      listLettersForContact(cid).then(setLetters).catch(() => {});
+      getPostGridStatus().then((s) => setMailStatus({ apiKey: s.apiKey, senderConfigured: s.senderConfigured })).catch(() => {});
       setErr(null);
     } catch (e) { setErr((e as Error).message); }
   }
@@ -164,6 +176,41 @@ export default function ContactDetailPage() {
     } catch (e) { alert(`Logged failed: ${(e as Error).message}`); }
   }
 
+  function openMailComposer() {
+    if (!data) return;
+    const c = data.contact;
+    const first = c.kind === 'person' ? c.name.split(/\s+/)[0] : c.name;
+    setMailSubject('Interest in your Denver property');
+    setMailHtml(
+      `<p>Dear ${first},</p>\n` +
+      `<p>My name is Tom. I'm a multifamily investor active in Denver, and I wanted to reach out about your property portfolio.</p>\n` +
+      `<p>I specialize in off-market acquisitions of 100+ unit assets and would welcome a brief conversation about whether any of your holdings might be a fit — either for an outright sale or a structured partnership.</p>\n` +
+      `<p>If this is of any interest, my direct line is [YOUR PHONE] or simply reply to this letter.</p>\n` +
+      `<p>Best regards,<br>Tom</p>`
+    );
+    setMailOpen(true);
+  }
+
+  async function sendMail() {
+    if (!mailHtml.trim()) return;
+    setMailSending(true);
+    try {
+      const out = await sendPostGridLetterToContact({
+        contactId: cid,
+        html: mailHtml,
+        subject: mailSubject || undefined,
+      });
+      alert(
+        `Letter created in PostGrid (${out.postgrid.live ? 'LIVE' : 'TEST'} mode).\n` +
+        `ID: ${out.postgrid.id}\nStatus: ${out.postgrid.status}`
+      );
+      setMailOpen(false);
+      setMailSubject(''); setMailHtml('');
+      load();
+    } catch (e) { alert(`Failed: ${(e as Error).message}`); }
+    finally { setMailSending(false); }
+  }
+
   async function runPortfolioMatch() {
     try {
       const out = await matchContactToPortfolio(cid);
@@ -225,7 +272,20 @@ export default function ContactDetailPage() {
                 onClick={openOutreachComposer}
                 className="block ml-auto bg-emerald-700 hover:bg-emerald-600 border border-emerald-500 rounded px-3 py-1 text-xs text-white"
               >
-                Compose outreach →
+                Compose email →
+              </button>
+              <button
+                onClick={openMailComposer}
+                disabled={!c.addressLine1 || !mailStatus?.apiKey || !mailStatus?.senderConfigured}
+                title={
+                  !c.addressLine1 ? 'Contact has no address — add one via API first' :
+                  !mailStatus?.apiKey ? 'POSTGRID_API_KEY not set on server' :
+                  !mailStatus?.senderConfigured ? 'Configure your return address in Settings' :
+                  ''
+                }
+                className="block ml-auto bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded px-3 py-1 text-xs text-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Send postal letter →
               </button>
               {c.kind === 'firm' && (
                 <button
@@ -238,6 +298,49 @@ export default function ContactDetailPage() {
             </div>
           </div>
         </div>
+
+        {mailOpen && (
+          <div className="bg-slate-900 border border-blue-700 rounded p-5 mb-6">
+            <div className="flex items-baseline justify-between mb-3">
+              <h2 className="text-lg font-semibold">Postal letter (PostGrid)</h2>
+              <button onClick={() => setMailOpen(false)} className="text-xs text-slate-400 hover:underline">
+                Cancel
+              </button>
+            </div>
+            <div className="mb-3 text-xs text-slate-400">
+              Recipient: <span className="text-slate-200">
+                {c.name}{c.addressLine1 ? `, ${c.addressLine1}, ${c.city}, ${c.stateCode} ${c.zip}` : ''}
+              </span>
+            </div>
+            <div className="space-y-2">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Subject / internal description</label>
+                <input
+                  value={mailSubject} onChange={(e) => setMailSubject(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  Body (HTML — PostGrid supports basic tags: p, h1–h6, br, b/strong, i/em, ul/ol/li, a)
+                </label>
+                <textarea
+                  value={mailHtml} onChange={(e) => setMailHtml(e.target.value)} rows={14}
+                  className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs font-mono"
+                />
+              </div>
+              <div className="flex items-center gap-2 text-xs text-slate-500">
+                <button onClick={sendMail} disabled={mailSending}
+                  className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded px-4 py-1.5 text-sm text-white">
+                  {mailSending ? 'Sending…' : 'Send via PostGrid'}
+                </button>
+                <span>
+                  Your API key is in test mode — letters are created in PostGrid but not printed/mailed.
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {outreachOpen && (
           <div className="bg-slate-900 border border-emerald-700 rounded p-5 mb-6">
@@ -381,6 +484,29 @@ export default function ContactDetailPage() {
             </ul>
           </section>
         </div>
+
+        {letters.length > 0 && (
+          <section className="bg-slate-900 border border-slate-800 rounded p-5 mt-6">
+            <h2 className="text-lg font-semibold mb-3">Letters mailed</h2>
+            <ul className="text-sm divide-y divide-slate-800">
+              {letters.map((l) => (
+                <li key={l.id} className="py-2 flex items-center gap-3">
+                  <span className="text-xs text-slate-500 w-24">{new Date(l.createdAt).toLocaleDateString()}</span>
+                  <span className="text-xs font-mono text-slate-400 w-52 truncate">{l.providerId ?? '(no id)'}</span>
+                  <span className="flex-1 text-slate-200 truncate">{l.subject ?? '(no subject)'}</span>
+                  <span className="text-xs text-slate-500">
+                    {l.live ? 'LIVE' : 'TEST'} · {l.status}
+                  </span>
+                  {l.carrierTracking?.trackingUrl && (
+                    <a className="text-xs text-indigo-400 underline" href={l.carrierTracking.trackingUrl} target="_blank" rel="noreferrer">
+                      track
+                    </a>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {/* Filings + Properties */}
         {(data.filings.length > 0 || data.properties.length > 0) && (

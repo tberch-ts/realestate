@@ -424,3 +424,83 @@ export async function matchAllToPortfolio(): Promise<{
   if (!res.ok) throw new Error(`match-portfolio-all: ${res.status}`);
   return res.json();
 }
+
+// ---- PostGrid (postal mail) ----
+
+export interface PostGridAddress {
+  firstName?: string;
+  lastName?: string;
+  companyName?: string;
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  provinceOrState: string;
+  postalOrZip: string;
+  countryCode?: string;
+}
+
+export interface Letter {
+  id: number;
+  contactId?: number;
+  interactionId?: number;
+  provider: string;
+  providerId?: string;
+  live: boolean;
+  subject?: string;
+  status: string;
+  carrierTracking?: { trackingNumber?: string; trackingUrl?: string };
+  sendDate?: string;
+  expectedDelivery?: string;
+  createdAt: string;
+}
+
+export async function getPostGridStatus(): Promise<{
+  apiKey: boolean;
+  senderConfigured: boolean;
+  sender: PostGridAddress | null;
+}> {
+  const res = await fetch(`${BASE}/api/postgrid/status`);
+  if (!res.ok) throw new Error(`postgrid status: ${res.status}`);
+  return res.json();
+}
+
+export async function getPostGridSender(): Promise<PostGridAddress | null> {
+  const res = await fetch(`${BASE}/api/postgrid/sender`);
+  if (!res.ok) throw new Error(`postgrid sender: ${res.status}`);
+  return (await res.json()).data as PostGridAddress | null;
+}
+
+export async function setPostGridSender(sender: PostGridAddress): Promise<void> {
+  const res = await fetch(`${BASE}/api/postgrid/sender`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(sender),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`set sender: ${res.status} — ${err.slice(0, 200)}`);
+  }
+}
+
+export async function sendPostGridLetterToContact(input: {
+  contactId: number; html: string; subject?: string; color?: boolean; doubleSided?: boolean;
+}): Promise<{ letter: Letter; postgrid: { id: string; status: string; live: boolean } }> {
+  const res = await fetch(`${BASE}/api/postgrid/letters/from-contact`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`send letter: ${res.status} — ${err.slice(0, 300)}`);
+  }
+  return res.json();
+}
+
+export async function listLettersForContact(contactId: number): Promise<Letter[]> {
+  const url = new URL(`${BASE}/api/postgrid/letters`, typeof window !== 'undefined' ? window.location.origin : undefined);
+  url.searchParams.set('contactId', String(contactId));
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`list letters: ${res.status}`);
+  return (await res.json()).data as Letter[];
+}
