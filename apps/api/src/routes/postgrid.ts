@@ -1,6 +1,9 @@
 import { Router } from 'express';
 import { getSetting, setSetting } from '../db/appSettingsRepo.js';
-import { createLetter, getLetter, isConfigured, type PostGridAddress } from '../providers/postgridClient.js';
+import {
+  createLetter, getLetter, isConfigured, liveConfigured, testConfigured, currentMode,
+  type PostGridAddress,
+} from '../providers/postgridClient.js';
 import { createLetterRecord, listLettersForContact, updateLetterStatus } from '../db/lettersRepo.js';
 import { getContact } from '../db/contactsRepo.js';
 import { createInteraction } from '../db/interactionsRepo.js';
@@ -9,9 +12,15 @@ export const postgridRouter = Router();
 
 // ---- Config status ----
 postgridRouter.get('/status', async (_req, res) => {
-  const apiKey = isConfigured();
   const sender = await getSetting<PostGridAddress>('postgrid_from');
-  res.json({ apiKey, senderConfigured: !!sender, sender });
+  res.json({
+    apiKey: isConfigured(),
+    liveConfigured: liveConfigured(),
+    testConfigured: testConfigured(),
+    mode: currentMode(),
+    senderConfigured: !!sender,
+    sender,
+  });
 });
 
 // ---- Sender address settings ----
@@ -128,6 +137,7 @@ postgridRouter.post('/letters/from-contact', async (req, res) => {
     res.status(201).json({
       letter: rec,
       postgrid: { id: letter.id, status: letter.status, live: letter.live },
+      mode: currentMode(),
     });
   } catch (err) {
     res.status(500).json({ error: 'send_letter_failed', message: (err as Error).message });

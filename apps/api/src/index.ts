@@ -8,6 +8,7 @@ loadEnv({ path: join(__dirname, '../../../.env') });
 import express from 'express';
 import cors from 'cors';
 import { basicAuth } from './middleware/basicAuth.js';
+import { devModeMiddleware } from './middleware/devMode.js';
 import { geocodeRouter } from './routes/geocode.js';
 import { propertyRouter } from './routes/property.js';
 import { providersRouter } from './routes/providers.js';
@@ -34,6 +35,7 @@ app.get('/health', (_req, res) => {
 });
 
 app.use(basicAuth);
+app.use(devModeMiddleware);
 
 app.use('/api/geocode', geocodeRouter);
 app.use('/api/property', propertyRouter);

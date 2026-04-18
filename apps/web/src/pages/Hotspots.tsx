@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import type { FollowupResult, FollowupScored } from '@mfa/shared';
-import { fetchFollowup } from '../lib/api';
+import { apiFetch, fetchFollowup } from '../lib/api';
 import { loadGoogleMaps } from '../lib/googleMaps';
 import { API_URL as API_BASE, GOOGLE_MAPS_API_KEY as MAPS_KEY } from '../lib/runtimeEnv';
 
@@ -52,7 +52,7 @@ export default function Hotspots() {
         setStatus('ready');
 
         // Fetch scored GeoJSON
-        const res = await fetch(`${API_BASE}/api/hotspots/denver`);
+        const res = await apiFetch(`${API_BASE}/api/hotspots/denver`);
         if (!res.ok) throw new Error(`API ${res.status}`);
         const body = await res.json();
         if (cancelled) return;

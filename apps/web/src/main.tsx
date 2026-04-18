@@ -15,10 +15,12 @@ import Filings from './pages/Filings';
 import Contacts from './pages/Contacts';
 import ContactDetail from './pages/ContactDetail';
 import Settings from './pages/Settings';
+import DevModeBanner from './components/DevModeBanner';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
+      <DevModeBanner />
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/property" element={<Property />} />

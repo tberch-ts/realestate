@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { LoiDraft } from '@mfa/shared';
-import { deleteDraft, listDrafts, listFollowUps, patchFollowUp, type FollowUp } from '../lib/api';
+import { apiFetch, deleteDraft, listDrafts, listFollowUps, patchFollowUp, type FollowUp } from '../lib/api';
 import { API_URL as API_BASE } from '../lib/runtimeEnv';
+import { getDevMode, toggleDevMode, onDevModeChange } from '../lib/devMode';
 
 interface RankedZone {
   name: string;
@@ -21,9 +22,10 @@ export default function Home() {
   const [zonesLoading, setZonesLoading] = useState(true);
   const [drafts, setDrafts] = useState<LoiDraft[] | null>(null);
   const [followUps, setFollowUps] = useState<FollowUp[] | null>(null);
+  const [devMode, setDevModeState] = useState<boolean>(() => getDevMode());
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/hotspots/denver/ranked?limit=10`)
+    apiFetch(`${API_BASE}/api/hotspots/denver/ranked?limit=10`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((body) => setZones(body.data ?? []))
       .catch((e: Error) => setZonesError(e.message))
@@ -36,6 +38,8 @@ export default function Home() {
     listFollowUps({ status: 'open', dueBefore: cutoff.toISOString().slice(0, 10), limit: 10 })
       .then(setFollowUps).catch(() => setFollowUps([]));
   }, []);
+
+  useEffect(() => onDevModeChange(setDevModeState), []);
 
   async function markFollowUpDone(id: number) {
     try {
@@ -113,6 +117,15 @@ export default function Home() {
           <Link to="/settings" className="hover:text-indigo-300 underline">
             Settings →
           </Link>
+          <button
+            onClick={() => { const next = toggleDevMode(); setDevModeState(next); }}
+            title="Ctrl+Alt+D toggles. Test credentials on, no real mail / real charges."
+            className={`text-xs border rounded px-2 py-0.5 ${devMode
+              ? 'bg-amber-600 border-amber-400 text-amber-50'
+              : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500'}`}
+          >
+            {devMode ? '⚠ DEV' : 'LIVE'}
+          </button>
         </div>
 
         {followUps && followUps.length > 0 && (

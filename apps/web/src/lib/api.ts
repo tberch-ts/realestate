@@ -14,11 +14,27 @@ import type {
 } from '@mfa/shared';
 
 import { API_URL as BASE } from './runtimeEnv';
+import { getDevMode } from './devMode';
+
+// Centralized fetch — handles two things every API call needs:
+//   1. Resolves relative paths against API_URL (empty string in prod,
+//      http://localhost:4000 in dev when no override).
+//   2. Injects x-mfa-dev-mode header so the server picks the right
+//      test/live credentials per request.
+// Use for ALL /api/* calls in this codebase. External calls (Google Maps
+// JS API, etc.) stay on raw fetch.
+export function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const headers = new Headers(init?.headers);
+  if (!headers.has('x-mfa-dev-mode')) {
+    headers.set('x-mfa-dev-mode', getDevMode() ? 'true' : 'false');
+  }
+  return fetch(input, { ...init, headers });
+}
 
 // ---- LOI drafts ----
 
 export async function createDraft(input: LoiDraftCreate): Promise<LoiDraft> {
-  const res = await fetch(`${BASE}/api/loi/drafts`, {
+  const res = await apiFetch(`${BASE}/api/loi/drafts`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),
@@ -28,7 +44,7 @@ export async function createDraft(input: LoiDraftCreate): Promise<LoiDraft> {
 }
 
 export async function updateDraft(id: number, patch: LoiDraftPatch): Promise<LoiDraft> {
-  const res = await fetch(`${BASE}/api/loi/drafts/${id}`, {
+  const res = await apiFetch(`${BASE}/api/loi/drafts/${id}`, {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(patch),
@@ -38,20 +54,20 @@ export async function updateDraft(id: number, patch: LoiDraftPatch): Promise<Loi
 }
 
 export async function loadDraft(id: number): Promise<LoiDraft> {
-  const res = await fetch(`${BASE}/api/loi/drafts/${id}`);
+  const res = await apiFetch(`${BASE}/api/loi/drafts/${id}`);
   if (!res.ok) throw new Error(`load draft: ${res.status}`);
   return res.json();
 }
 
 export async function listDrafts(status: 'draft' | 'sent' | 'archived' | 'all' = 'draft'): Promise<LoiDraft[]> {
-  const res = await fetch(`${BASE}/api/loi/drafts?status=${status}`);
+  const res = await apiFetch(`${BASE}/api/loi/drafts?status=${status}`);
   if (!res.ok) throw new Error(`list drafts: ${res.status}`);
   const body = await res.json();
   return body.data as LoiDraft[];
 }
 
 export async function deleteDraft(id: number): Promise<void> {
-  const res = await fetch(`${BASE}/api/loi/drafts/${id}`, { method: 'DELETE' });
+  const res = await apiFetch(`${BASE}/api/loi/drafts/${id}`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`delete draft: ${res.status}`);
 }
 
@@ -66,7 +82,7 @@ export async function fetchOwners(opts: {
   if (opts.outOfState) url.searchParams.set('outOfState', '1');
   if (opts.search) url.searchParams.set('search', opts.search);
   if (opts.limit) url.searchParams.set('limit', String(opts.limit));
-  const res = await fetch(url);
+  const res = await apiFetch(url);
   if (!res.ok) throw new Error(`API ${res.status}`);
   const body = await res.json();
   return body.data.clusters as OwnerCluster[];
@@ -75,7 +91,7 @@ export async function fetchOwners(opts: {
 export async function fetchOwner(name: string): Promise<OwnerCluster> {
   const url = new URL(`${BASE}/api/portfolio/denver/owner`, typeof window !== "undefined" ? window.location.origin : undefined);
   url.searchParams.set('name', name);
-  const res = await fetch(url);
+  const res = await apiFetch(url);
   if (!res.ok) throw new Error(`API ${res.status}`);
   const body = await res.json();
   return body.data as OwnerCluster;
@@ -84,7 +100,7 @@ export async function fetchOwner(name: string): Promise<OwnerCluster> {
 export async function fetchSosEntity(name: string): Promise<SosEntity | null> {
   const url = new URL(`${BASE}/api/sos/entity`, typeof window !== "undefined" ? window.location.origin : undefined);
   url.searchParams.set('name', name);
-  const res = await fetch(url);
+  const res = await apiFetch(url);
   if (!res.ok) throw new Error(`API ${res.status}`);
   const body = await res.json();
   return body.data as SosEntity | null;
@@ -101,7 +117,7 @@ export async function fetchFollowup(
   if (opts.minUnits) url.searchParams.set('minUnits', String(opts.minUnits));
   if (opts.minYear) url.searchParams.set('minYear', String(opts.minYear));
   if (opts.limit) url.searchParams.set('limit', String(opts.limit));
-  const res = await fetch(url);
+  const res = await apiFetch(url);
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`API ${res.status}: ${text.slice(0, 120)}`);
@@ -113,7 +129,7 @@ export async function fetchFollowup(
 export async function fetchProperty(address: string): Promise<PropertySnapshot> {
   const url = new URL(`${BASE}/api/property`, typeof window !== "undefined" ? window.location.origin : undefined);
   url.searchParams.set('address', address);
-  const res = await fetch(url);
+  const res = await apiFetch(url);
   if (!res.ok) throw new Error(`API ${res.status}`);
   return res.json();
 }
@@ -121,13 +137,13 @@ export async function fetchProperty(address: string): Promise<PropertySnapshot> 
 export async function fetchProviderStatus(): Promise<
   Record<string, { status: string; cost: string; required?: boolean }>
 > {
-  const res = await fetch(`${BASE}/api/providers/status`);
+  const res = await apiFetch(`${BASE}/api/providers/status`);
   if (!res.ok) throw new Error(`API ${res.status}`);
   return res.json();
 }
 
 export async function previewUnderwriting(u: UnderwritingInput): Promise<UnderwritingOutput> {
-  const res = await fetch(`${BASE}/api/deals/underwrite`, {
+  const res = await apiFetch(`${BASE}/api/deals/underwrite`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ underwriting: u }),
@@ -137,7 +153,7 @@ export async function previewUnderwriting(u: UnderwritingInput): Promise<Underwr
 }
 
 export async function saveDeal(deal: DealInput): Promise<{ id: number; underwritingOutput: UnderwritingOutput }> {
-  const res = await fetch(`${BASE}/api/deals`, {
+  const res = await apiFetch(`${BASE}/api/deals`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(deal),
@@ -150,19 +166,19 @@ export async function saveDeal(deal: DealInput): Promise<{ id: number; underwrit
 }
 
 export async function fetchDeals(): Promise<DealRecord[]> {
-  const res = await fetch(`${BASE}/api/deals`);
+  const res = await apiFetch(`${BASE}/api/deals`);
   if (!res.ok) throw new Error(`API ${res.status}`);
   return res.json();
 }
 
 export async function fetchDeal(id: number): Promise<DealRecord> {
-  const res = await fetch(`${BASE}/api/deals/${id}`);
+  const res = await apiFetch(`${BASE}/api/deals/${id}`);
   if (!res.ok) throw new Error(`API ${res.status}`);
   return res.json();
 }
 
 export async function downloadLoi(deal: DealInput, loi: LoiInput): Promise<void> {
-  const res = await fetch(`${BASE}/api/loi`, {
+  const res = await apiFetch(`${BASE}/api/loi`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ deal, loi }),
@@ -228,7 +244,7 @@ export async function listFormDFilings(opts: {
   if (opts.dateFrom) url.searchParams.set('dateFrom', opts.dateFrom);
   if (opts.dateTo)   url.searchParams.set('dateTo', opts.dateTo);
   if (opts.limit)    url.searchParams.set('limit', String(opts.limit));
-  const res = await fetch(url);
+  const res = await apiFetch(url);
   if (!res.ok) throw new Error(`filings list: ${res.status}`);
   return (await res.json()).data as FormDSummary[];
 }
@@ -236,7 +252,7 @@ export async function listFormDFilings(opts: {
 export async function getFormDFiling(accession: string, cik: string): Promise<FormDDetail> {
   const url = new URL(`${BASE}/api/filings/form-d/${encodeURIComponent(accession)}`, typeof window !== 'undefined' ? window.location.origin : undefined);
   url.searchParams.set('cik', cik);
-  const res = await fetch(url);
+  const res = await apiFetch(url);
   if (!res.ok) throw new Error(`filing detail: ${res.status}`);
   return (await res.json()).data as FormDDetail;
 }
@@ -309,19 +325,19 @@ export async function listContacts(opts: {
   if (opts.source) url.searchParams.set('source', opts.source);
   if (opts.search) url.searchParams.set('search', opts.search);
   if (opts.limit)  url.searchParams.set('limit', String(opts.limit));
-  const res = await fetch(url);
+  const res = await apiFetch(url);
   if (!res.ok) throw new Error(`list contacts: ${res.status}`);
   return (await res.json()).data as Contact[];
 }
 
 export async function getContact(id: number): Promise<ContactDetail> {
-  const res = await fetch(`${BASE}/api/crm/contacts/${id}`);
+  const res = await apiFetch(`${BASE}/api/crm/contacts/${id}`);
   if (!res.ok) throw new Error(`get contact: ${res.status}`);
   return res.json();
 }
 
 export async function createContact(input: Partial<Contact> & { kind: ContactKind; name: string }): Promise<Contact> {
-  const res = await fetch(`${BASE}/api/crm/contacts`, {
+  const res = await apiFetch(`${BASE}/api/crm/contacts`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),
@@ -331,7 +347,7 @@ export async function createContact(input: Partial<Contact> & { kind: ContactKin
 }
 
 export async function patchContact(id: number, patch: Partial<Contact>): Promise<Contact> {
-  const res = await fetch(`${BASE}/api/crm/contacts/${id}`, {
+  const res = await apiFetch(`${BASE}/api/crm/contacts/${id}`, {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(patch),
@@ -341,7 +357,7 @@ export async function patchContact(id: number, patch: Partial<Contact>): Promise
 }
 
 export async function deleteContact(id: number): Promise<void> {
-  const res = await fetch(`${BASE}/api/crm/contacts/${id}`, { method: 'DELETE' });
+  const res = await apiFetch(`${BASE}/api/crm/contacts/${id}`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`delete contact: ${res.status}`);
 }
 
@@ -349,7 +365,7 @@ export async function createInteraction(
   contactId: number,
   input: { kind: InteractionKind; subject?: string; body?: string; occurredAt?: string }
 ): Promise<Interaction> {
-  const res = await fetch(`${BASE}/api/crm/contacts/${contactId}/interactions`, {
+  const res = await apiFetch(`${BASE}/api/crm/contacts/${contactId}/interactions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),
@@ -365,7 +381,7 @@ export async function listFollowUps(opts: {
   if (opts.status)    url.searchParams.set('status', opts.status);
   if (opts.dueBefore) url.searchParams.set('dueBefore', opts.dueBefore);
   if (opts.limit)     url.searchParams.set('limit', String(opts.limit));
-  const res = await fetch(url);
+  const res = await apiFetch(url);
   if (!res.ok) throw new Error(`list follow-ups: ${res.status}`);
   return (await res.json()).data as FollowUp[];
 }
@@ -374,7 +390,7 @@ export async function createFollowUp(
   contactId: number,
   input: { dueDate: string; subject: string; notes?: string }
 ): Promise<FollowUp> {
-  const res = await fetch(`${BASE}/api/crm/contacts/${contactId}/follow-ups`, {
+  const res = await apiFetch(`${BASE}/api/crm/contacts/${contactId}/follow-ups`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),
@@ -384,7 +400,7 @@ export async function createFollowUp(
 }
 
 export async function patchFollowUp(id: number, patch: Partial<FollowUp>): Promise<FollowUp> {
-  const res = await fetch(`${BASE}/api/crm/follow-ups/${id}`, {
+  const res = await apiFetch(`${BASE}/api/crm/follow-ups/${id}`, {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(patch),
@@ -396,7 +412,7 @@ export async function patchFollowUp(id: number, patch: Partial<FollowUp>): Promi
 export async function importContactsFromFormD(accession: string, cik: string): Promise<{
   created: Array<{ contactId: number; name: string; relation: string; portfolioMatches: number }>;
 }> {
-  const res = await fetch(`${BASE}/api/crm/contacts/from-form-d`, {
+  const res = await apiFetch(`${BASE}/api/crm/contacts/from-form-d`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ accession, cik }),
@@ -410,7 +426,7 @@ export async function matchContactToPortfolio(id: number): Promise<{
   matches: number;
   details: Array<{ propertyRef: string; ownerName: string; score: number; units: number; address: string }>;
 }> {
-  const res = await fetch(`${BASE}/api/crm/contacts/${id}/match-portfolio`, { method: 'POST' });
+  const res = await apiFetch(`${BASE}/api/crm/contacts/${id}/match-portfolio`, { method: 'POST' });
   if (!res.ok) throw new Error(`match-portfolio: ${res.status}`);
   return res.json();
 }
@@ -420,7 +436,7 @@ export async function matchAllToPortfolio(): Promise<{
   totalLinks: number;
   perContact: Array<{ id: number; name: string; matches: number }>;
 }> {
-  const res = await fetch(`${BASE}/api/crm/match-portfolio-all`, { method: 'POST' });
+  const res = await apiFetch(`${BASE}/api/crm/match-portfolio-all`, { method: 'POST' });
   if (!res.ok) throw new Error(`match-portfolio-all: ${res.status}`);
   return res.json();
 }
@@ -459,19 +475,19 @@ export async function getPostGridStatus(): Promise<{
   senderConfigured: boolean;
   sender: PostGridAddress | null;
 }> {
-  const res = await fetch(`${BASE}/api/postgrid/status`);
+  const res = await apiFetch(`${BASE}/api/postgrid/status`);
   if (!res.ok) throw new Error(`postgrid status: ${res.status}`);
   return res.json();
 }
 
 export async function getPostGridSender(): Promise<PostGridAddress | null> {
-  const res = await fetch(`${BASE}/api/postgrid/sender`);
+  const res = await apiFetch(`${BASE}/api/postgrid/sender`);
   if (!res.ok) throw new Error(`postgrid sender: ${res.status}`);
   return (await res.json()).data as PostGridAddress | null;
 }
 
 export async function setPostGridSender(sender: PostGridAddress): Promise<void> {
-  const res = await fetch(`${BASE}/api/postgrid/sender`, {
+  const res = await apiFetch(`${BASE}/api/postgrid/sender`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(sender),
@@ -485,7 +501,7 @@ export async function setPostGridSender(sender: PostGridAddress): Promise<void> 
 export async function sendPostGridLetterToContact(input: {
   contactId: number; html: string; subject?: string; color?: boolean; doubleSided?: boolean;
 }): Promise<{ letter: Letter; postgrid: { id: string; status: string; live: boolean } }> {
-  const res = await fetch(`${BASE}/api/postgrid/letters/from-contact`, {
+  const res = await apiFetch(`${BASE}/api/postgrid/letters/from-contact`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),
@@ -500,7 +516,7 @@ export async function sendPostGridLetterToContact(input: {
 export async function listLettersForContact(contactId: number): Promise<Letter[]> {
   const url = new URL(`${BASE}/api/postgrid/letters`, typeof window !== 'undefined' ? window.location.origin : undefined);
   url.searchParams.set('contactId', String(contactId));
-  const res = await fetch(url);
+  const res = await apiFetch(url);
   if (!res.ok) throw new Error(`list letters: ${res.status}`);
   return (await res.json()).data as Letter[];
 }

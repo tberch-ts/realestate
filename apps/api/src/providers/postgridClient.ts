@@ -1,6 +1,11 @@
 // Minimal typed wrapper for PostGrid Print & Mail API v1.
 // Docs: https://postgrid.readme.io/  (we use /print-mail/v1/letters + /contacts)
 // Auth: single x-api-key header. Test keys start with "test_sk_", live "live_sk_".
+//
+// Per-request mode: isDevMode() flips us to POSTGRID_API_KEY_TEST so the UI can
+// browse prod with test credentials without changing env vars.
+
+import { isDevMode } from '../middleware/devMode.js';
 
 const BASE_URL = 'https://api.postgrid.com';
 
@@ -55,9 +60,16 @@ export interface PostGridLetterResponse {
 }
 
 function apiKey(): string {
-  const key = process.env.POSTGRID_API_KEY;
-  if (!key) throw new Error('POSTGRID_API_KEY not set');
+  const dev = isDevMode();
+  const key = dev
+    ? process.env.POSTGRID_API_KEY_TEST
+    : process.env.POSTGRID_API_KEY;
+  if (!key) throw new Error(`POSTGRID_API_KEY${dev ? '_TEST' : ''} not set`);
   return key;
+}
+
+export function currentMode(): 'test' | 'live' {
+  return isDevMode() ? 'test' : 'live';
 }
 
 export async function createLetter(input: CreateLetterInput): Promise<PostGridLetterResponse> {
@@ -105,5 +117,15 @@ export async function cancelLetter(letterId: string): Promise<PostGridLetterResp
 }
 
 export function isConfigured(): boolean {
+  // Either mode must be configured for the service to be "usable"; callers
+  // decide which mode they need.
+  return !!process.env.POSTGRID_API_KEY || !!process.env.POSTGRID_API_KEY_TEST;
+}
+
+export function liveConfigured(): boolean {
   return !!process.env.POSTGRID_API_KEY;
+}
+
+export function testConfigured(): boolean {
+  return !!process.env.POSTGRID_API_KEY_TEST;
 }
