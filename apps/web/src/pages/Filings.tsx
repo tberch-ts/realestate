@@ -9,9 +9,28 @@ import {
 // One-click "Add to CRM" imports the issuer + all related persons (promoters,
 // officers, directors) and links them to the filing for future follow-up.
 
+const KEYWORD_PRESETS = [
+  { label: 'Real Estate', value: '"real estate"' },
+  { label: 'Multifamily', value: 'multifamily' },
+  { label: 'Apartments', value: 'apartment' },
+  { label: 'Residential', value: 'residential' },
+  { label: 'Storage', value: 'storage' },
+  { label: 'Opportunity Zone', value: '"opportunity zone"' },
+];
+
+function isoNDaysAgo(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+
 export default function Filings() {
   const [state, setState] = useState<string>('CO');
   const [keyword, setKeyword] = useState<string>('"real estate"');
+  const [dateFrom, setDateFrom] = useState<string>(() => isoNDaysAgo(365));
+  const [dateTo, setDateTo] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [limit, setLimit] = useState<number>(100);
+  const [sort, setSort] = useState<'newest' | 'oldest' | 'issuer'>('newest');
   const [rows, setRows] = useState<FormDSummary[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -20,21 +39,36 @@ export default function Filings() {
   const [imported, setImported] = useState<Record<string, number>>({}); // accession -> count
 
   useEffect(() => {
-    fetchRows(state, keyword);
+    fetchRows();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function fetchRows(st: string, kw: string) {
+  async function fetchRows() {
     setLoading(true);
     setErr(null);
     try {
-      const data = await listFormDFilings({ state: st || undefined, keyword: kw || undefined, limit: 100 });
+      const data = await listFormDFilings({
+        state: state || undefined,
+        keyword: keyword || undefined,
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
+        limit,
+      });
       setRows(data);
     } catch (e) {
       setErr((e as Error).message);
     } finally {
       setLoading(false);
     }
+  }
+
+  function sortedRows(): FormDSummary[] {
+    if (!rows) return [];
+    const copy = [...rows];
+    if (sort === 'newest') copy.sort((a, b) => b.filingDate.localeCompare(a.filingDate));
+    else if (sort === 'oldest') copy.sort((a, b) => a.filingDate.localeCompare(b.filingDate));
+    else if (sort === 'issuer') copy.sort((a, b) => a.issuerName.localeCompare(b.issuerName));
+    return copy;
   }
 
   async function toggleDetail(r: FormDSummary) {
@@ -79,30 +113,87 @@ export default function Filings() {
         </p>
 
         <form
-          className="flex flex-wrap items-end gap-3 mb-6 bg-slate-900 border border-slate-800 rounded p-4"
-          onSubmit={(e) => { e.preventDefault(); fetchRows(state, keyword); }}
+          className="mb-6 bg-slate-900 border border-slate-800 rounded p-4 space-y-3"
+          onSubmit={(e) => { e.preventDefault(); fetchRows(); }}
         >
-          <div>
-            <label className="block text-xs text-slate-400 mb-1">State (biz address)</label>
-            <input
-              value={state}
-              onChange={(e) => setState(e.target.value.toUpperCase().slice(0, 2))}
-              placeholder="CO"
-              className="bg-slate-950 border border-slate-700 rounded px-2 py-1 w-20 uppercase"
-            />
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">State</label>
+              <input
+                value={state}
+                onChange={(e) => setState(e.target.value.toUpperCase().slice(0, 2))}
+                placeholder="CO"
+                className="bg-slate-950 border border-slate-700 rounded px-2 py-1 w-20 uppercase"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">From</label>
+              <input
+                type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+                className="bg-slate-950 border border-slate-700 rounded px-2 py-1"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">To</label>
+              <input
+                type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+                className="bg-slate-950 border border-slate-700 rounded px-2 py-1"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Limit</label>
+              <select
+                value={limit} onChange={(e) => setLimit(Number(e.target.value))}
+                className="bg-slate-950 border border-slate-700 rounded px-2 py-1"
+              >
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={200}>200</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Sort</label>
+              <select
+                value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}
+                className="bg-slate-950 border border-slate-700 rounded px-2 py-1"
+              >
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="issuer">Issuer A–Z</option>
+              </select>
+            </div>
+            <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 rounded px-4 py-1.5">
+              Search
+            </button>
           </div>
-          <div className="flex-1 min-w-[220px]">
-            <label className="block text-xs text-slate-400 mb-1">Keyword (EDGAR full-text, in quotes for phrase)</label>
-            <input
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              placeholder='"real estate"'
-              className="bg-slate-950 border border-slate-700 rounded px-2 py-1 w-full"
-            />
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex-1 min-w-[220px]">
+              <label className="block text-xs text-slate-400 mb-1">
+                Keyword (EDGAR full-text — use "double quotes" for phrase match)
+              </label>
+              <input
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+                placeholder='"real estate"'
+                className="bg-slate-950 border border-slate-700 rounded px-2 py-1 w-full"
+              />
+            </div>
           </div>
-          <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 rounded px-4 py-1.5">
-            Search
-          </button>
+          <div className="flex flex-wrap gap-1.5">
+            <span className="text-xs text-slate-500 self-center mr-1">Preset:</span>
+            {KEYWORD_PRESETS.map((p) => (
+              <button
+                key={p.label} type="button"
+                onClick={() => setKeyword(p.value)}
+                className={`text-xs px-2 py-0.5 rounded border
+                  ${keyword === p.value
+                    ? 'bg-emerald-700 border-emerald-500 text-white'
+                    : 'bg-slate-950 border-slate-700 hover:border-slate-500 text-slate-300'}`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
         </form>
 
         {loading && <p className="text-slate-400">Loading…</p>}
@@ -116,7 +207,7 @@ export default function Filings() {
         )}
 
         <div className="space-y-2">
-          {(rows ?? []).map((r) => {
+          {sortedRows().map((r) => {
             const isOpen = expanded === r.accessionNumber;
             const d = details[r.accessionNumber];
             const count = imported[r.accessionNumber];
