@@ -39,18 +39,25 @@ let initError: Error | null = null;
 
 function loadServiceAccount(): Record<string, unknown> | null {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  if (!raw) return null;
+  if (!raw) {
+    console.warn('[firebase-auth] FIREBASE_SERVICE_ACCOUNT_JSON env not set');
+    return null;
+  }
+  console.log(`[firebase-auth] FIREBASE_SERVICE_ACCOUNT_JSON present (${raw.length} chars)`);
   // Accept either raw JSON or base64-encoded JSON. The latter is friendlier
   // when pasting into DO App Platform secret fields (no newline issues).
   let jsonStr = raw.trim();
   if (!jsonStr.startsWith('{')) {
     try {
       jsonStr = Buffer.from(jsonStr, 'base64').toString('utf8');
+      console.log(`[firebase-auth] base64-decoded to ${jsonStr.length} chars`);
     } catch (e) {
       throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON looks neither like JSON nor base64');
     }
   }
-  return JSON.parse(jsonStr);
+  const parsed = JSON.parse(jsonStr);
+  console.log(`[firebase-auth] parsed JSON keys: ${Object.keys(parsed).join(', ')}`);
+  return parsed;
 }
 
 function getAdminApp(): App | null {
