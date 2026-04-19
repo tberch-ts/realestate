@@ -97,10 +97,19 @@ export async function firebaseAuth(req: Request, res: Response, next: NextFuncti
 
   const app = getAdminApp();
   if (!app) {
-    res.status(503).json({
-      error: 'auth_unavailable',
-      message: 'Firebase Admin SDK not configured. Set FIREBASE_SERVICE_ACCOUNT_JSON or FIREBASE_AUTH_BYPASS=true for dev.',
-    });
+    // Return 401 (auth required) rather than 503 (server unavailable).
+    // DO App Platform treats persistent 503s as "upstream unhealthy" and
+    // replaces the body with their generic HTML error page, hiding our
+    // actual JSON message. 401 is semantically correct anyway: from the
+    // client's perspective, auth is mandatory and unavailable to them.
+    res
+      .status(401)
+      .set('x-mfa-auth', 'firebase-not-configured')
+      .json({
+        error: 'unauthorized',
+        message:
+          'Firebase Admin SDK not configured on the API. Set FIREBASE_SERVICE_ACCOUNT_JSON env or use basic-auth (AUTH_MODE=both keeps both paths live).',
+      });
     return;
   }
 
