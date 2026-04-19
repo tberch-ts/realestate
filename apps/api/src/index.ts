@@ -8,6 +8,7 @@ loadEnv({ path: join(__dirname, '../../../.env') });
 import express from 'express';
 import cors from 'cors';
 import { basicAuth } from './middleware/basicAuth.js';
+import { firebaseAuth } from './middleware/firebaseAuth.js';
 import { devModeMiddleware } from './middleware/devMode.js';
 import { geocodeRouter } from './routes/geocode.js';
 import { propertyRouter } from './routes/property.js';
@@ -27,14 +28,65 @@ import { warmDenverHotspots } from './providers/denverNeighborhoods.js';
 import { warmDenverPortfolio } from './providers/denverPortfolio.js';
 
 const app = express();
-app.use(cors());
+
+// CORS: allow the integrated TalkStudio frontend + the legacy
+// re.talkstud.io frontend to call us. Authorization header must be
+// explicitly allowed for Bearer tokens to flow through preflight.
+//
+// Configurable via CORS_ALLOWED_ORIGINS (comma-separated) for staging or
+// other envs. Default list covers prod talkstudio + local dev.
+const DEFAULT_ALLOWED = [
+  'https://talkstud.io',
+  'https://www.talkstud.io',
+  'https://re.talkstud.io',
+  'http://localhost:3001',
+  'http://localhost:5173',
+];
+const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS
+  ? process.env.CORS_ALLOWED_ORIGINS.split(',').map(s => s.trim())
+  : DEFAULT_ALLOWED);
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      // No origin header = same-origin or curl/server — always allow.
+      if (!origin) return cb(null, true);
+      if (allowedOrigins.includes(origin)) return cb(null, true);
+      return cb(new Error(`CORS: origin ${origin} not allowed`));
+    },
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  })
+);
 app.use(express.json({ limit: '1mb' }));
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'mfa-api', ts: new Date().toISOString() });
 });
 
-app.use(basicAuth);
+// Auth middleware order:
+//   1. firebaseAuth — preferred (signs in via Google through TalkStudio).
+//      Verifies a Bearer ID token and short-circuits with 401 on failure.
+//   2. basicAuth    — legacy fallback for the standalone re.talkstud.io
+//      basic-auth gate. Skipped automatically when AUTH_MODE=firebase.
+//
+// Set AUTH_MODE=firebase in production to drop basic-auth entirely.
+// Default 'both' keeps backward compat: basic-auth requests still work
+// during the transition window.
+const authMode = (process.env.AUTH_MODE ?? 'both').toLowerCase();
+if (authMode === 'firebase') {
+  app.use(firebaseAuth);
+} else if (authMode === 'basic') {
+  app.use(basicAuth);
+} else {
+  // 'both' — try firebase first; if no Bearer header present, fall through
+  // to basic auth so existing browser logins keep working.
+  app.use(async (req, res, next) => {
+    if (req.path === '/health') return next();
+    const hasBearer = (req.header('authorization') ?? '').startsWith('Bearer ');
+    if (hasBearer) return firebaseAuth(req, res, next);
+    return basicAuth(req, res, next);
+  });
+}
 app.use(devModeMiddleware);
 
 app.use('/api/geocode', geocodeRouter);
