@@ -54,7 +54,7 @@ app.use(
       return cb(new Error(`CORS: origin ${origin} not allowed`));
     },
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-mfa-dev-mode'],
   })
 );
 app.use(express.json({ limit: '1mb' }));
