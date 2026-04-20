@@ -15,6 +15,7 @@ import Filings from './pages/Filings';
 import Contacts from './pages/Contacts';
 import ContactDetail from './pages/ContactDetail';
 import Settings from './pages/Settings';
+import Playbook from './pages/Playbook';
 import DevModeBanner from './components/DevModeBanner';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
@@ -35,6 +36,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <Route path="/contacts" element={<Contacts />} />
         <Route path="/contact/:id" element={<ContactDetail />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/playbook" element={<Playbook />} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>
