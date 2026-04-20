@@ -117,6 +117,9 @@ export default function Home() {
           <Link to="/settings" className="hover:text-indigo-300 underline">
             Settings →
           </Link>
+          <Link to="/playbook" className="hover:text-indigo-300 underline">
+            Deal playbook →
+          </Link>
           <button
             onClick={() => { const next = toggleDevMode(); setDevModeState(next); }}
             title="Ctrl+Alt+D toggles. Test credentials on, no real mail / real charges."
