@@ -1,6 +1,6 @@
 import type { GeocodedAddress, PropertySnapshot } from '@mfa/shared';
 import { geocodeAddress } from './googleGeocode.js';
-import { fetchDenverAssessor } from './denverAssessor.js';
+import { fetchAssessor } from './assessorDispatcher.js';
 import { fetchCensus } from './census.js';
 import { fetchHudFmr } from './hud.js';
 import { fetchAttom } from './attom.js';
@@ -15,7 +15,12 @@ export async function buildPropertySnapshot(address: string): Promise<PropertySn
   const resolved = geocode.status === 'ok' ? (geocode.data as GeocodedAddress) : null;
 
   const [assessor, census, hud, attom, rentcast, bls, crime, landlord] = await Promise.all([
-    resolved ? fetchDenverAssessor(resolved) : notAvailable('denver_assessor', 'No geocode'),
+    // Dispatcher routes to the right county assessor based on geocode —
+    // Denver, Phoenix, Nashville, Charlotte, Tampa, Raleigh all supported.
+    // Austin returns not_available (no public TCAD API); dispatcher also
+    // returns not_available for unsupported counties and the snapshot
+    // then leans on ATTOM/RentCast.
+    resolved ? fetchAssessor(resolved) : notAvailable('assessor', 'No geocode'),
     resolved ? fetchCensus(resolved) : notAvailable('census_acs', 'No geocode'),
     fetchHudFmr(),
     fetchAttom(),
