@@ -50,7 +50,49 @@ export interface AssessorRecord {
   lastSalePrice?: number;
   lastSaleDate?: string;
   taxHistory?: Array<{ year: number; amount: number }>;
-  source?: 'denver_residential' | 'denver_commercial' | 'other';
+  // Market-tagged source so the UI can label which county assessor answered.
+  // Kept open for 'other' so generic ATTOM/RentCast fallbacks still type-check.
+  source?:
+    | 'denver_residential'
+    | 'denver_commercial'
+    | 'maricopa'         // Phoenix MSA
+    | 'travis'           // Austin MSA (TCAD — no public API as of 2026)
+    | 'davidson_tn'      // Nashville MSA
+    | 'mecklenburg_nc'   // Charlotte MSA
+    | 'hillsborough_fl'  // Tampa MSA
+    | 'wake_nc'          // Raleigh MSA
+    | 'other';
+}
+
+// ---------- Markets ----------
+// Canonical identifier for every MSA we support. Added in the Phase-A
+// multi-market expansion (was: Denver-only). New MSAs extend this union.
+export type MarketKey =
+  | 'denver'
+  | 'phoenix'
+  | 'austin'
+  | 'nashville'
+  | 'charlotte'
+  | 'tampa'
+  | 'raleigh';
+
+export interface MarketConfig {
+  key: MarketKey;
+  label: string;              // Human label e.g. "Denver, CO"
+  stateCode: string;          // Two-letter state code
+  countyFips: string;         // 5-digit state+county FIPS (e.g. "08031" Denver)
+  countyName: string;
+  // Center of the MSA — used for default map viewport when no address yet.
+  center: [number, number];   // [lng, lat]
+  // Status flags so the frontend can gate UI (show/hide menus) and the
+  // dispatchers can return helpful `not_available` messages.
+  assessorSupported: boolean;
+  sosSupported: boolean;
+  neighborhoodsSupported: boolean;
+  followupSupported: boolean;
+  portfolioSupported: boolean;
+  // Short rationale shown on the market-picker / "why is this grayed out?" UI.
+  notes?: string;
 }
 
 export interface CensusRecord {
@@ -304,7 +346,6 @@ export interface LoiDraftPatch {
 }
 
 // ---------- Follow-up prospects ----------
-
 export type OwnerType = 'individual' | 'llc' | 'institutional' | 'unknown';
 
 export interface FollowupProperty {
