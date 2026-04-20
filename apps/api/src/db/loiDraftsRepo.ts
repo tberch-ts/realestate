@@ -8,8 +8,17 @@ import type {
 } from '@mfa/shared';
 import { pool } from './pool.js';
 
+// All read/write operations are scoped to a Firebase user id. Callers
+// MUST pass userId — there is no "all users" view. Cross-user reads
+// return null (handled as 404 in the route layer to avoid leaking
+// existence). Cross-user updates/deletes are no-ops returning null/false.
+//
+// userId is the Firebase Auth `uid` claim from the verified ID token,
+// stored as TEXT (Firebase UIDs are 28-char base62 strings).
+
 interface Row {
   id: string;
+  user_id: string | null;
   address: string;
   deal_id: string | null;
   property_id: string | null;
@@ -33,57 +42,84 @@ function toDraft(r: Row): LoiDraft {
   };
 }
 
-export async function createDraft(input: LoiDraftCreate): Promise<LoiDraft> {
+export async function createDraft(userId: string, input: LoiDraftCreate): Promise<LoiDraft> {
   const payload = { loi: input.loi, dealContext: input.dealContext };
   const { rows } = await pool.query<Row>(
-    `INSERT INTO loi_drafts (address, deal_id, property_id, data)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO loi_drafts (user_id, address, deal_id, property_id, data)
+     VALUES ($1, $2, $3, $4, $5)
      RETURNING *`,
-    [input.address, input.dealId ?? null, input.propertyId ?? null, payload]
+    [userId, input.address, input.dealId ?? null, input.propertyId ?? null, payload]
   );
   return toDraft(rows[0]);
 }
 
-export async function getDraft(id: number): Promise<LoiDraft | null> {
-  const { rows } = await pool.query<Row>(`SELECT * FROM loi_drafts WHERE id = $1`, [id]);
+/**
+ * Fetch a single draft, but only if it belongs to this user. Returns null
+ * for both "doesn't exist" and "exists but belongs to someone else" — the
+ * route layer maps both to 404 so we don't reveal whether an id is taken.
+ */
+export async function getDraft(userId: string, id: number): Promise<LoiDraft | null> {
+  const { rows } = await pool.query<Row>(
+    `SELECT * FROM loi_drafts WHERE id = $1 AND user_id = $2`,
+    [id, userId]
+  );
   return rows[0] ? toDraft(rows[0]) : null;
 }
 
-export async function listDrafts(opts: {
-  status?: LoiDraftStatus | 'all';
-  limit?: number;
-} = {}): Promise<LoiDraft[]> {
+export async function listDrafts(
+  userId: string,
+  opts: {
+    status?: LoiDraftStatus | 'all';
+    limit?: number;
+  } = {}
+): Promise<LoiDraft[]> {
   const limit = Math.min(opts.limit ?? 50, 200);
   const status = opts.status ?? 'draft';
-  const where = status === 'all' ? '' : `WHERE status = $2`;
-  const params: (string | number)[] = [limit];
-  if (status !== 'all') params.push(status);
+  // Always filter by user_id; status filter is optional.
+  // Pre-migration rows have NULL user_id and are invisible to everyone.
+  const params: (string | number)[] = [userId, limit];
+  let where = `WHERE user_id = $1`;
+  if (status !== 'all') {
+    where += ` AND status = $3`;
+    params.push(status);
+  }
   const { rows } = await pool.query<Row>(
-    `SELECT * FROM loi_drafts ${where} ORDER BY updated_at DESC LIMIT $1`,
+    `SELECT * FROM loi_drafts ${where} ORDER BY updated_at DESC LIMIT $2`,
     params
   );
   return rows.map(toDraft);
 }
 
-export async function updateDraft(id: number, patch: LoiDraftPatch): Promise<LoiDraft | null> {
-  // Load current row to merge `data` payload (since we store both loi + dealContext in one JSONB col)
-  const existing = await getDraft(id);
+export async function updateDraft(
+  userId: string,
+  id: number,
+  patch: LoiDraftPatch
+): Promise<LoiDraft | null> {
+  // Load owned row first — merges existing data and enforces ownership in
+  // a single round-trip. If the user doesn't own it, getDraft returns null
+  // and we never run the UPDATE.
+  const existing = await getDraft(userId, id);
   if (!existing) return null;
   const nextLoi = patch.loi ?? existing.loi;
   const nextCtx = patch.dealContext ?? existing.dealContext;
   const nextStatus = patch.status ?? existing.status;
   const payload = { loi: nextLoi, dealContext: nextCtx };
+  // user_id is also re-checked in the WHERE clause as defense-in-depth,
+  // in case the row's owner changed between the SELECT and UPDATE.
   const { rows } = await pool.query<Row>(
     `UPDATE loi_drafts
         SET data = $1, status = $2, updated_at = now()
-      WHERE id = $3
+      WHERE id = $3 AND user_id = $4
       RETURNING *`,
-    [payload, nextStatus, id]
+    [payload, nextStatus, id, userId]
   );
   return rows[0] ? toDraft(rows[0]) : null;
 }
 
-export async function deleteDraft(id: number): Promise<boolean> {
-  const { rowCount } = await pool.query(`DELETE FROM loi_drafts WHERE id = $1`, [id]);
+export async function deleteDraft(userId: string, id: number): Promise<boolean> {
+  const { rowCount } = await pool.query(
+    `DELETE FROM loi_drafts WHERE id = $1 AND user_id = $2`,
+    [id, userId]
+  );
   return (rowCount ?? 0) > 0;
 }
