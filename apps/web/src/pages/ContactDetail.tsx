@@ -65,6 +65,7 @@ export default function ContactDetailPage() {
   const [intKind, setIntKind] = useState<InteractionKind>('note');
   const [intSubject, setIntSubject] = useState('');
   const [intBody, setIntBody] = useState('');
+  const [intOccurredAt, setIntOccurredAt] = useState(''); // empty = default to now at submit
 
   // Outreach composer
   const [outreachOpen, setOutreachOpen] = useState(false);
@@ -104,8 +105,10 @@ export default function ContactDetailPage() {
     e.preventDefault();
     if (!intSubject.trim() && !intBody.trim()) return;
     try {
-      await createInteraction(cid, { kind: intKind, subject: intSubject || undefined, body: intBody || undefined });
-      setIntSubject(''); setIntBody('');
+      // occurredAt defaults to now at submit time, not page load
+      const occurredAt = intOccurredAt || new Date().toISOString();
+      await createInteraction(cid, { kind: intKind, subject: intSubject || undefined, body: intBody || undefined, occurredAt });
+      setIntSubject(''); setIntBody(''); setIntOccurredAt('');
       load();
     } catch (e) { alert(`Failed: ${(e as Error).message}`); }
   }
@@ -466,6 +469,14 @@ export default function ContactDetailPage() {
                 placeholder="What happened?" rows={2}
                 className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-sm"
               />
+              <div className="flex items-center gap-2">
+                <input
+                  type="datetime-local"
+                  value={intOccurredAt} onChange={(e) => setIntOccurredAt(e.target.value)}
+                  className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-sm text-slate-400"
+                />
+                <span className="text-xs text-slate-600">leave blank to use current time</span>
+              </div>
               <button className="bg-emerald-600 hover:bg-emerald-500 rounded px-3 py-1 text-sm">
                 Log entry
               </button>
