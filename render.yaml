@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: smartinvestorcrm-api
+    runtime: node
+    region: oregon
+    plan: free
+    buildCommand: npm install && cd functions && npm install && cd .. && bash scripts/build-functions.sh
+    startCommand: node render-server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: AUTH_MODE
+        value: firebase
