@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>SmartInvestorCRM</title>
+    <!--
+      GitHub Pages has no server-side rewrite, so a hard refresh on a deep
+      link like /app/contacts 404s. This shim (the well-known
+      spa-github-pages technique) encodes the attempted path into a query
+      string and redirects to index.html, which decodes it back via
+      history.replaceState before React mounts (see index.html).
+    -->
+    <script>
+      var path = location.pathname + location.search + location.hash;
+      location.replace('/?redirect=' + encodeURIComponent(path));
+    </script>
+  </head>
+  <body></body>
+</html>

@@ -266,6 +266,65 @@ postgridRouter.post('/letters/loi', async (req, res) => {
   }
 });
 
+// ---- Inline send — no Postgres side effects ----
+// For multi-tenant callers (apps/crm) whose contacts/deals/LOIs live in
+// Firestore, not this API's Postgres tables. Sender and recipient are always
+// passed explicitly in the body (no app_settings lookup, no contactId FK
+// lookup), and nothing is written to contacts/interactions/letters here —
+// the caller is responsible for recording the result (letter id/status) in
+// its own data store after a successful response.
+postgridRouter.post('/letters/inline', async (req, res) => {
+  try {
+    if (!isConfigured()) {
+      res.status(400).json({ error: 'postgrid_not_configured', message: 'POSTGRID_API_KEY env var is not set' });
+      return;
+    }
+    const { to, from, deal, loi, html, subject, color, doubleSided } = (req.body ?? {}) as {
+      to?: PostGridAddress;
+      from?: PostGridAddress;
+      deal?: DealInput;
+      loi?: LoiInput;
+      html?: string;
+      subject?: string;
+      color?: boolean;
+      doubleSided?: boolean;
+    };
+    if (!to?.addressLine1 || !to?.city || !to?.provinceOrState || !to?.postalOrZip) {
+      res.status(400).json({ error: 'to_address_incomplete', message: 'to.addressLine1, city, provinceOrState, postalOrZip required' });
+      return;
+    }
+    if (!from?.addressLine1 || !from?.city || !from?.provinceOrState || !from?.postalOrZip) {
+      res.status(400).json({ error: 'from_address_incomplete', message: 'from.addressLine1, city, provinceOrState, postalOrZip required' });
+      return;
+    }
+    if (!deal && !loi && !html) {
+      res.status(400).json({ error: 'content_required', message: 'Provide either {deal, loi} to render an LOI PDF, or html for a plain letter.' });
+      return;
+    }
+
+    const letter = deal && loi
+      ? await createLetterFromPdfBuffer({
+          to,
+          from,
+          pdf: await renderLoiPdf(deal, loi),
+          pdfFilename: `LOI-${deal.address.replace(/[^a-z0-9]+/gi, '_').slice(0, 60)}.pdf`,
+          description: subject ?? `LOI for ${deal.address}`,
+          color, doubleSided,
+        })
+      : await createLetter({
+          to,
+          from,
+          html: html!,
+          description: subject,
+          color, doubleSided,
+        });
+
+    res.status(201).json({ id: letter.id, status: letter.status, live: letter.live });
+  } catch (err) {
+    res.status(500).json({ error: 'send_letter_failed', message: (err as Error).message });
+  }
+});
+
 // ---- Refresh letter status from PostGrid ----
 postgridRouter.post('/letters/:id/refresh', async (req, res) => {
   try {
