@@ -207,8 +207,8 @@ function Hero() {
       </p>
 
       <p className="text-sm text-gray-500 mb-10">
-        While 10xDealFinder shows you a list of motivated sellers, SmartInvestorCRM lets you
-        underwrite them, draft the LOI, and manage the close. Different job.
+        However you find the address, SmartInvestorCRM takes it from there — underwrite it,
+        draft the LOI, and manage it all the way to close.
       </p>
 
       <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-6">
@@ -380,7 +380,7 @@ function DataSources() {
 
 function Comparison() {
   const rows = [
-    { feature: 'Motivated seller leads',      us: false, them: true,  note: 'Use 10xDealFinder for lead gen' },
+    { feature: 'Motivated seller leads',      us: false, them: true,  note: 'Pair with the lead-gen tool of your choice' },
     { feature: 'Property data lookup',         us: true,  them: false, note: 'Assessor + Census live' },
     { feature: 'Underwriting calculator',      us: true,  them: false },
     { feature: 'Deal scoring engine',          us: true,  them: false },
@@ -395,9 +395,9 @@ function Comparison() {
 
   return (
     <section className="px-6 md:px-10 py-24 max-w-4xl mx-auto">
-      <h2 className="text-3xl font-bold text-center mb-3">How we're different</h2>
+      <h2 className="text-3xl font-bold text-center mb-3">Where SmartInvestorCRM picks up</h2>
       <p className="text-gray-400 text-center mb-12">
-        They find the lead. SmartInvestorCRM closes it. Different tools, different jobs.
+        Lead-gen tools get you the address. SmartInvestorCRM does everything after that.
       </p>
 
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
@@ -407,7 +407,7 @@ function Comparison() {
         >
           <span>Feature</span>
           <span className="w-32 text-center text-blue-400">SmartInvestorCRM</span>
-          <span className="w-32 text-center">The Other Guys</span>
+          <span className="w-32 text-center">Lead-Gen Tools</span>
         </div>
         {rows.map(({ feature, us, them, note }, i) => (
           <div
@@ -433,7 +433,7 @@ function Comparison() {
         ))}
       </div>
       <p className="text-xs text-gray-600 text-center mt-4">
-        Pro tip: use both. Run 10xDealFinder to identify motivated sellers, then load the address into SmartInvestorCRM to underwrite and pipeline it.
+        Pro tip: use both. Find motivated sellers with your lead-gen tool, then load the address into SmartInvestorCRM to underwrite and pipeline it.
       </p>
     </section>
   )
