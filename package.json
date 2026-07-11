@@ -7,10 +7,11 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently -n api,web -c blue,green \"npm -w @mfa/api run dev\" \"npm -w @mfa/web run dev\"",
+    "dev": "concurrently -n api,web,crm -c blue,green,magenta \"npm -w @mfa/api run dev\" \"npm -w @mfa/web run dev\" \"npm -w @mfa/crm run dev\"",
     "dev:api": "npm -w @mfa/api run dev",
     "dev:web": "npm -w @mfa/web run dev",
-    "build": "npm -w @mfa/shared run build && npm -w @mfa/api run build && npm -w @mfa/web run build",
+    "dev:crm": "npm -w @mfa/crm run dev",
+    "build": "npm -w @mfa/shared run build && npm -w @mfa/api run build && npm -w @mfa/web run build && npm -w @mfa/crm run build",
     "db:migrate": "npm -w @mfa/api run db:migrate",
     "docker:up": "docker compose up --build",
     "docker:down": "docker compose down"

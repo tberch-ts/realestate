@@ -1,0 +1,32 @@
+# fly.toml app configuration file generated for mfa-api on 2026-07-11T12:42:25-06:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'mfa-api'
+primary_region = 'ord'
+
+[build]
+  dockerfile = 'infra/Dockerfile.api.prod'
+
+[env]
+  API_PORT = '4000'
+  NODE_ENV = 'production'
+
+[http_service]
+  internal_port = 4000
+  force_https = true
+  auto_stop_machines = 'off'
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = '10s'
+    timeout = '5s'
+    grace_period = '10s'
+    method = 'get'
+    path = '/health'
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '512mb'

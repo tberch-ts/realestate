@@ -10,7 +10,7 @@ Targeting **Denver metro** for v1.
 - **API:** Node + Express + TypeScript
 - **DB:** PostgreSQL
 - **Local:** Docker Compose
-- **Prod:** DigitalOcean App Platform (see [docs/DEPLOY.md](docs/DEPLOY.md))
+- **Prod:** Fly.io (api + web) + GitHub Pages (crm) — see [project-docs/DEPLOY_FLY.md](project-docs/DEPLOY_FLY.md), migrating off DigitalOcean ([project-docs/DEPLOY.md](project-docs/DEPLOY.md))
 
 ## Getting started
 
@@ -44,11 +44,14 @@ Missing a key never crashes the app — the panel shows "Unlock with &lt;provide
 ## Layout
 
 ```
-apps/web           React SPA
+apps/web           React SPA (Denver deal analyzer)
 apps/api           Express API
+apps/crm           React SPA (SmartInvestorCRM marketing site + app), builds into docs/ for GitHub Pages
 packages/shared    shared TS types
 db/migrations      SQL migrations
 infra/             deployment configs
+docs/              apps/crm's built output — GitHub Pages source, do not hand-edit
+project-docs/      project documentation (deploy guides, roadmap, handoff notes)
 ```
 
 ## Roadmap

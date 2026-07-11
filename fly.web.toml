@@ -1,0 +1,28 @@
+# fly.toml app configuration file generated for mfa-web on 2026-07-11T12:59:56-06:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'mfa-web'
+primary_region = 'ord'
+
+[build]
+  dockerfile = 'infra/Dockerfile.web.prod'
+
+[http_service]
+  internal_port = 80
+  force_https = true
+  auto_stop_machines = 'off'
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = '10s'
+    timeout = '5s'
+    grace_period = '10s'
+    method = 'get'
+    path = '/healthz'
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '256mb'

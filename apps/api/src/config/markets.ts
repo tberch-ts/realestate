@@ -56,7 +56,7 @@ export const MARKETS: ReadonlyArray<MarketConfig> = [
     neighborhoodsSupported: false,
     followupSupported: false,
     portfolioSupported: false,
-    notes: 'TCAD portal-only. See docs/data-sources-by-msa.md for plan.',
+    notes: 'TCAD portal-only. See project-docs/data-sources-by-msa.md for plan.',
   },
   {
     key: 'nashville',

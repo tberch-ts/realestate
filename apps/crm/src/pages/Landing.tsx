@@ -6,7 +6,7 @@ import {
   Activity, Search, Calculator, Kanban,
 } from 'lucide-react'
 import { useState } from 'react'
-import { PLAN_TIERS, PLAN_ORDER } from '@/types/plan'
+import { PLAN_TIERS, PLAN_ORDER } from '../types/plan'
 
 // ── Features ─────────────────────────────────────────────────────────────────
 
