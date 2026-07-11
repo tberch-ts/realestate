@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* SmartInvestorCRM "terminal" dark theme — referenced throughout Landing.tsx. */
+:root {
+  --bg-base: #0a0e17;
+  --bg-surface: #0d1220;
+  --bg-card: #131826;
+  --border: #1f2937;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}

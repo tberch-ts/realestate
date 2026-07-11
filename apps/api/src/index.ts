@@ -39,8 +39,12 @@ const DEFAULT_ALLOWED = [
   'https://talkstud.io',
   'https://www.talkstud.io',
   'https://re.talkstud.io',
+  'https://mfa-web.fly.dev',
+  'https://smartinvestorcrm.com',
+  'https://www.smartinvestorcrm.com',
   'http://localhost:3001',
   'http://localhost:5173',
+  'http://localhost:5174',
 ];
 const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS
   ? process.env.CORS_ALLOWED_ORIGINS.split(',').map(s => s.trim())

@@ -1,4 +1,9 @@
-# Deploy — DigitalOcean App Platform
+# Deploy — DigitalOcean App Platform (superseded)
+
+> **This deployment is being retired.** The app is still online but can no
+> longer be updated. See [DEPLOY_FLY.md](DEPLOY_FLY.md) for the current
+> Fly.io + GitHub Pages setup. Kept here for reference until DO is fully
+> decommissioned.
 
 Target: `re.talkstud.io` · Repo: `tberch-ts/realestate` · Branch: `main`
 

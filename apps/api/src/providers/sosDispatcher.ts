@@ -8,7 +8,7 @@ import { fetchFloridaSosEntity } from './floridaSos.js';
 //
 // Each state needs its own scraper because every SoS has a different
 // HTML layout, session-cookie handshake, and (in some cases) pay-per-
-// search paywall. Documented in docs/data-sources-by-msa.md.
+// search paywall. Documented in project-docs/data-sources-by-msa.md.
 export async function fetchSosByState(
   name: string,
   stateCode: string
@@ -26,7 +26,7 @@ export async function fetchSosByState(
         provider: 'arizona_sos',
         status: 'not_available',
         message:
-          'AZ business entities live at the AZ Corporation Commission (ecorp.azcc.gov). Scraper not yet implemented — see docs/data-sources-by-msa.md.',
+          'AZ business entities live at the AZ Corporation Commission (ecorp.azcc.gov). Scraper not yet implemented — see project-docs/data-sources-by-msa.md.',
       };
     case 'TX':
       return {
@@ -40,14 +40,14 @@ export async function fetchSosByState(
         provider: 'tennessee_sos',
         status: 'not_available',
         message:
-          'TN business search at tnbear.tn.gov is free; scraper not yet implemented — see docs/data-sources-by-msa.md.',
+          'TN business search at tnbear.tn.gov is free; scraper not yet implemented — see project-docs/data-sources-by-msa.md.',
       };
     case 'NC':
       return {
         provider: 'north_carolina_sos',
         status: 'not_available',
         message:
-          'NC business search at sosnc.gov is free; scraper not yet implemented — see docs/data-sources-by-msa.md.',
+          'NC business search at sosnc.gov is free; scraper not yet implemented — see project-docs/data-sources-by-msa.md.',
       };
 
     default:

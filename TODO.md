@@ -50,7 +50,7 @@ GitHub (main) ──auto-deploy──▶  App Platform
 - [ ] `apps/api/src/middleware/basicAuth.ts` — checks `Authorization: Basic`, skips `/health`, compares against `BASIC_AUTH_USER`/`BASIC_AUTH_PASS`
 - [ ] `.do/app.yaml` — App Spec (see below)
 - [ ] `docker-compose.prod.yml` — local smoke test mirror
-- [ ] `docs/DEPLOY.md` — first-time setup notes (create app from spec, set secrets, custom domain DNS)
+- [ ] `project-docs/DEPLOY.md` — first-time setup notes (create app from spec, set secrets, custom domain DNS)
 
 ## Files to modify
 
@@ -148,7 +148,7 @@ domains:
 5. Verify `migrate.ts` is idempotent.
 6. Write `.do/app.yaml` with the repo, domain, and disk values above.
 7. Write `docker-compose.prod.yml` and run `docker compose -f docker-compose.prod.yml up --build` to smoke-test the prod topology locally.
-8. Write `docs/DEPLOY.md`.
+8. Write `project-docs/DEPLOY.md`.
 9. Commit, push to `main`.
 10. Tell the user to run `doctl apps create --spec .do/app.yaml` (or click-through the DO console), then populate the SECRET env vars — including the basic-auth creds above — and point `re.talkstud.io` CNAME at the App Platform target.
 
