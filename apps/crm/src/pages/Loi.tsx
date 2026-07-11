@@ -25,10 +25,10 @@ export default function Loi() {
 
   useEffect(() => {
     if (!user) return
-    const unsubLois = onSnapshot(query(collection(db, 'lois'), where('userId', '==', user.uid)), (snap) =>
+    const unsubLois = onSnapshot(query(collection(db, 'lois'), where('ownerId', '==', user.uid)), (snap) =>
       setLois(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LoiRecord))
     )
-    const unsubContacts = onSnapshot(query(collection(db, 'contacts'), where('userId', '==', user.uid)), (snap) =>
+    const unsubContacts = onSnapshot(query(collection(db, 'contacts'), where('ownerId', '==', user.uid)), (snap) =>
       setContacts(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Contact))
     )
     const unsubUser = onSnapshot(doc(db, 'users', user.uid), (snap) => setSender((snap.data() as UserProfile | undefined)?.postgridSender))
@@ -45,7 +45,8 @@ export default function Loi() {
     setBusy(true)
     try {
       const ref = await addDoc(collection(db, 'lois'), {
-        userId: user.uid,
+        ownerId: user.uid,
+        members: [],
         address: address.trim(),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -239,7 +240,7 @@ function LoiEditor({ loi, contacts, sender }: { loi: LoiRecord; contacts: Contac
       await patch('mailedAt', serverTimestamp())
       if (loi.contactId) {
         await addDoc(collection(db, 'contacts', loi.contactId, 'interactions'), {
-          userId: loi.userId,
+          ownerId: loi.ownerId,
           kind: 'outreach_sent',
           subject: `LOI mailed for ${loi.address}`,
           body: `Sent via PostGrid (${result.live ? 'LIVE' : 'TEST'}). Letter ID: ${result.id}. Status: ${result.status}.`,

@@ -4,47 +4,75 @@ rules_version = '2';
 // GitHub Pages (see project-docs/DEPLOY_FLY.md) — this project is kept
 // solely for Auth + Firestore. Deploy with:
 //   firebase deploy --only firestore:rules --project smartinvestorcrm
+//
+// Matches the real production schema (verified directly against the
+// deployed rules/indexes on the live "smartinvestorcrm" project, not
+// guessed): docs carry `ownerId` (not `userId`), and deals/LOIs/capital
+// raises support team-sharing via a `members` array — the owner can
+// delete, owner-or-member can read/update.
 
-function isOwner(userId) {
-  return request.auth != null && request.auth.uid == userId;
+function isSignedIn() {
+  return request.auth != null;
+}
+
+function isOwner(resource) {
+  return request.auth.uid == resource.data.ownerId;
+}
+
+function isMember(resource) {
+  return request.auth.uid in resource.data.get('members', []);
+}
+
+function isAdmin() {
+  return isSignedIn() && request.auth.token.admin == true;
 }
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
     // Each user's own profile/plan doc, keyed by uid.
-    match /users/{userId} {
-      allow read, write: if isOwner(userId);
+    match /users/{uid} {
+      allow read, write: if isSignedIn() && request.auth.uid == uid;
     }
 
-    // Per-user CRM records — every doc must carry a userId field set to the
-    // creator's uid at write time; ownership never changes after creation.
-    match /deals/{docId} {
-      allow read, update, delete: if isOwner(resource.data.userId);
-      allow create: if isOwner(request.resource.data.userId);
+    match /deals/{dealId} {
+      allow read, update: if isSignedIn() && (isOwner(resource) || isMember(resource));
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.ownerId;
+      allow delete: if isSignedIn() && isOwner(resource);
     }
 
-    match /contacts/{docId} {
-      allow read, update, delete: if isOwner(resource.data.userId);
-      allow create: if isOwner(request.resource.data.userId);
+    match /contacts/{contactId} {
+      allow read, write: if isSignedIn() && isOwner(resource);
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.ownerId;
 
-      // Interaction timeline — userId is denormalized onto each interaction
-      // doc (not just inherited from the parent contact) so ownership can be
-      // checked directly without a get() lookup.
+      // Interaction timeline — our own addition (not in the original
+      // production schema, but a reasonable enhancement). ownerId is
+      // denormalized onto each interaction doc so ownership can be checked
+      // directly without a get() lookup on the parent contact.
       match /interactions/{interactionId} {
-        allow read, update, delete: if isOwner(resource.data.userId);
-        allow create: if isOwner(request.resource.data.userId);
+        allow read, update, delete: if isSignedIn() && request.auth.uid == resource.data.ownerId;
+        allow create: if isSignedIn() && request.auth.uid == request.resource.data.ownerId;
       }
     }
 
-    match /lois/{docId} {
-      allow read, update, delete: if isOwner(resource.data.userId);
-      allow create: if isOwner(request.resource.data.userId);
+    match /lois/{loiId} {
+      allow read, update: if isSignedIn() && (isOwner(resource) || isMember(resource));
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.ownerId;
+      allow delete: if isSignedIn() && isOwner(resource);
     }
 
-    match /capital_raises/{docId} {
-      allow read, update, delete: if isOwner(resource.data.userId);
-      allow create: if isOwner(request.resource.data.userId);
+    match /capital_raises/{raiseId} {
+      allow read, update: if isSignedIn() && (isOwner(resource) || isMember(resource));
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.ownerId;
+      allow delete: if isSignedIn() && isOwner(resource);
+    }
+
+    // Shared reference data (e.g. MSA-level market signals) — readable by
+    // any signed-in user, writable only via admin custom claim (backend/
+    // Cloud Function use, not client writes).
+    match /market_signals/{msaSlug} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
     }
 
     // Default deny — anything not explicitly matched above is inaccessible.

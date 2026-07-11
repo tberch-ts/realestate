@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 'firebase/auth'
+import { createUserWithEmailAndPassword, signInWithPopup, updateProfile, GoogleAuthProvider } from 'firebase/auth'
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { Building2 } from 'lucide-react'
 import { auth, db } from '../lib/firebase'
@@ -8,15 +8,17 @@ import { PLAN_TIERS } from '../types/plan'
 
 const googleProvider = new GoogleAuthProvider()
 
-async function createUserDoc(uid: string, email: string | null, planId: string) {
+async function createUserDoc(uid: string, email: string | null, displayName: string | null, planId: string) {
   await setDoc(doc(db, 'users', uid), {
     email,
+    displayName,
     plan: planId in PLAN_TIERS ? planId : 'free',
     createdAt: serverTimestamp(),
   })
 }
 
 export default function SignUp() {
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -31,7 +33,8 @@ export default function SignUp() {
     setBusy(true)
     try {
       const cred = await createUserWithEmailAndPassword(auth, email, password)
-      await createUserDoc(cred.user.uid, cred.user.email, planId)
+      if (name.trim()) await updateProfile(cred.user, { displayName: name.trim() })
+      await createUserDoc(cred.user.uid, cred.user.email, name.trim() || null, planId)
       navigate('/app', { replace: true })
     } catch (err) {
       setError((err as Error).message)
@@ -45,7 +48,7 @@ export default function SignUp() {
     setBusy(true)
     try {
       const cred = await signInWithPopup(auth, googleProvider)
-      await createUserDoc(cred.user.uid, cred.user.email, planId)
+      await createUserDoc(cred.user.uid, cred.user.email, cred.user.displayName, planId)
       navigate('/app', { replace: true })
     } catch (err) {
       setError((err as Error).message)
@@ -84,6 +87,15 @@ export default function SignUp() {
           </div>
 
           <form onSubmit={handleEmailSignUp} className="space-y-3">
+            <input
+              type="text"
+              required
+              placeholder="Full name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full rounded-lg border px-3 py-2 text-sm bg-transparent"
+              style={{ borderColor: 'var(--border)' }}
+            />
             <input
               type="email"
               required

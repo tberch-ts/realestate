@@ -60,11 +60,11 @@ export default function ContactDetail() {
     navigate('/app/contacts')
   }
 
-  async function logInteraction(input: Omit<Interaction, 'id' | 'userId' | 'createdAt'>) {
+  async function logInteraction(input: Omit<Interaction, 'id' | 'ownerId' | 'createdAt'>) {
     if (!id || !contact) return
     await addDoc(collection(db, 'contacts', id, 'interactions'), {
       ...input,
-      userId: contact.userId,
+      ownerId: contact.ownerId,
       occurredAt: input.occurredAt ?? serverTimestamp(),
       createdAt: serverTimestamp(),
     })
@@ -143,7 +143,7 @@ function OutreachComposer({
 }: {
   contact: Contact
   sender: UserProfile['postgridSender']
-  onLogged: (input: Omit<Interaction, 'id' | 'userId' | 'createdAt'>) => Promise<void>
+  onLogged: (input: Omit<Interaction, 'id' | 'ownerId' | 'createdAt'>) => Promise<void>
 }) {
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
@@ -230,7 +230,7 @@ function OutreachComposer({
   )
 }
 
-function ManualLogForm({ onLog }: { onLog: (input: Omit<Interaction, 'id' | 'userId' | 'createdAt'>) => Promise<void> }) {
+function ManualLogForm({ onLog }: { onLog: (input: Omit<Interaction, 'id' | 'ownerId' | 'createdAt'>) => Promise<void> }) {
   const [kind, setKind] = useState<Interaction['kind']>('note')
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
