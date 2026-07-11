@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc, where,
 } from 'firebase/firestore'
@@ -15,11 +16,12 @@ const LABEL = 'text-xs text-gray-500 block mb-1'
 
 export default function Loi() {
   const { user } = useAuth()
+  const [params] = useSearchParams()
   const [lois, setLois] = useState<LoiRecord[]>([])
   const [contacts, setContacts] = useState<Contact[]>([])
   const [sender, setSender] = useState<UserProfile['postgridSender']>()
-  const [showForm, setShowForm] = useState(false)
-  const [address, setAddress] = useState('')
+  const [showForm, setShowForm] = useState(!!params.get('address'))
+  const [address, setAddress] = useState(params.get('address') ?? '')
   const [busy, setBusy] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
 
@@ -44,10 +46,12 @@ export default function Loi() {
     if (!user || !address.trim()) return
     setBusy(true)
     try {
+      const unitsParam = params.get('units')
       const ref = await addDoc(collection(db, 'lois'), {
         ownerId: user.uid,
         members: [],
         address: address.trim(),
+        ...(unitsParam ? { units: Number(unitsParam) } : {}),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
