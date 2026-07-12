@@ -56,20 +56,30 @@ this PR, never verified live.
 ## Hotspots (`/app/hotspots`)
 
 - [ ] **[existing]** Map loads, neighborhoods are clickable, score colors look right
-- [ ] **[new]** Clicking a neighborhood shows a "Follow-up candidates in this zone →" link, and it goes to a populated Followup page
+- [ ] **[existing]** Clicking a neighborhood shows a "Follow-up candidates in this zone →" link, and it goes to a populated Followup page
+- [ ] **[new]** Market picker defaults to Denver on first visit; switching markets reloads the map centered on that market and clears the selected-neighborhood panel
+- [ ] **[new]** Market picker shows Denver/Phoenix/Nashville/Charlotte/Tampa as selectable and Austin/Raleigh as disabled "(coming soon)" options
+- [ ] **[new]** Phoenix map loads all 15 Urban Villages; clicking one shows income/rent/population/rent-burden (may be blank if `CENSUS_API_KEY` isn't set — that's an existing Census-key requirement, not new)
+- [ ] **[new]** Nashville map loads all 14 Community Planning Areas
+- [ ] **[new]** Charlotte map loads all 15 Community Planning Areas
+- [ ] **[new]** Tampa map loads ~107 active neighborhood associations (inactive ones are filtered out)
+- [ ] **[new]** "Follow-up candidates in this zone →" link for a non-Denver market's neighborhood goes to Followup and shows the "not available for this market yet" message instead of an error/blank page
 
 ## Portfolio (`/app/portfolio`) — new page
 
-- [ ] Owner list loads (Denver 100+ unit clusters)
-- [ ] Search-by-owner-name filter works
-- [ ] "Out-of-state owners only" checkbox filters correctly
-- [ ] Clicking an owner name goes to `/app/owner?name=...` with the right owner
+- [ ] **[existing]** Owner list loads (Denver 100+ unit clusters)
+- [ ] **[existing]** Search-by-owner-name filter works
+- [ ] **[existing]** "Out-of-state owners only" checkbox filters correctly
+- [ ] **[existing]** Clicking an owner name goes to `/app/owner?name=...&market=denver` with the right owner
+- [ ] **[new]** Market picker only allows Denver — every other market is disabled "(coming soon)" since portfolio ownership rollups are Denver-only today
+- [ ] **[new]** Header/subtitle read "{Market} ownership clusters" instead of a hardcoded "Denver ownership clusters"
 
 ## Owner (`/app/owner`) — new page, reached only via Portfolio/Followup links
 
-- [ ] Portfolio stats (properties, units, avg year, mailing state) render for a real owner name
-- [ ] "Unmask owner" button hits the Colorado SOS lookup and shows entity/registered-agent info (or the correct "no match" message)
-- [ ] Property table rows link to Property Search and LOI correctly
+- [ ] **[existing]** Portfolio stats (properties, units, avg year, mailing state) render for a real owner name
+- [ ] **[existing]** "Unmask owner" button hits the Colorado SOS lookup and shows entity/registered-agent info (or the correct "no match" message)
+- [ ] **[existing]** Property table rows link to Property Search and LOI correctly
+- [ ] **[new]** Arriving via `?name=...&market=denver` (from Portfolio/Followup) carries the market through; "← All owners" link returns to `/app/portfolio?market=denver`
 
 ## Filings (`/app/filings`) — new page
 
@@ -81,10 +91,12 @@ this PR, never verified live.
 
 ## Followup (`/app/followup`) — new page, reached only via Hotspots zone link
 
-- [ ] Arriving with `?zone=...` loads candidates for that neighborhood
-- [ ] Min units / min year filters narrow the list
-- [ ] Column sorting (score, units, built, years held, sale price, owner) works both directions
-- [ ] Analyze/Start LOI/Owner links all go to the right places
+- [ ] **[existing]** Arriving with `?zone=...` loads candidates for that neighborhood
+- [ ] **[existing]** Min units / min year filters narrow the list
+- [ ] **[existing]** Column sorting (score, units, built, years held, sale price, owner) works both directions
+- [ ] **[existing]** Analyze/Start LOI/Owner links all go to the right places
+- [ ] **[new]** Arriving with `?market=denver&zone=...` shows candidates for that market/zone; the market picker only allows Denver (others disabled "(coming soon)")
+- [ ] **[new]** Switching the market picker on this page navigates back to `/app/hotspots?market=<new>` (since zone names don't carry across markets)
 
 ## Playbook (`/app/playbook`) — new page
 
