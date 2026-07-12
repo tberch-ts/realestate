@@ -13,7 +13,7 @@ const firebaseConfig = {
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID ?? 'smartinvestorcrm',
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET ?? 'smartinvestorcrm.appspot.com',
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID ?? '576601480079',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID ?? 'smartinvestorcrm',
 };
 
 const app = initializeApp(firebaseConfig);

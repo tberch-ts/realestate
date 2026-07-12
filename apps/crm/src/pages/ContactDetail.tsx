@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
-  addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc,
+  addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where,
 } from 'firebase/firestore'
 import { Mail, Send, Trash2 } from 'lucide-react'
 import { db } from '../lib/firebase'
@@ -37,11 +37,12 @@ export default function ContactDetail() {
   }, [id])
 
   useEffect(() => {
-    if (!id) return
-    return onSnapshot(query(collection(db, 'contacts', id, 'interactions'), orderBy('occurredAt', 'desc')), (snap) =>
-      setInteractions(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Interaction))
+    if (!id || !user) return
+    return onSnapshot(
+      query(collection(db, 'contacts', id, 'interactions'), where('ownerId', '==', user.uid), orderBy('occurredAt', 'desc')),
+      (snap) => setInteractions(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Interaction))
     )
-  }, [id])
+  }, [id, user])
 
   useEffect(() => {
     if (!user) return
