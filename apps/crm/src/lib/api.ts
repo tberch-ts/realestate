@@ -26,6 +26,30 @@ export async function apiFetch(input: string | URL, init?: RequestInit): Promise
   return fetch(input, { ...init, headers });
 }
 
+// ---- Billing (Stripe) ----
+
+export async function createCheckoutSession(plan: 'pro' | 'team'): Promise<{ url: string }> {
+  const res = await apiFetch(`${BASE}/api/billing/checkout`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ plan }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.message ?? `API ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function createPortalSession(): Promise<{ url: string }> {
+  const res = await apiFetch(`${BASE}/api/billing/portal`, { method: 'POST' });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.message ?? `API ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function fetchProperty(address: string): Promise<PropertySnapshot> {
   const url = new URL(`${BASE}/api/property`, typeof window !== 'undefined' ? window.location.origin : undefined);
   url.searchParams.set('address', address);

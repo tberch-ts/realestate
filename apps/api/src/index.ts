@@ -24,6 +24,7 @@ import { marketsRouter } from './routes/markets.js';
 import { filingsRouter } from './routes/filings.js';
 import { crmRouter } from './routes/crm.js';
 import { postgridRouter } from './routes/postgrid.js';
+import { billingRouter, stripeWebhookHandler } from './routes/billing.js';
 import { warmDenverHotspots } from './providers/denverNeighborhoods.js';
 import { warmDenverPortfolio } from './providers/denverPortfolio.js';
 
@@ -61,6 +62,11 @@ app.use(
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-mfa-dev-mode'],
   })
 );
+// Stripe webhook needs the exact raw request bytes to verify its signature —
+// register it with express.raw() ahead of the global express.json() below,
+// and ahead of the auth gate (Stripe can't send a Firebase/basic-auth header).
+app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), stripeWebhookHandler);
+
 app.use(express.json({ limit: '1mb' }));
 
 app.get('/health', (_req, res) => {
@@ -107,6 +113,7 @@ app.use('/api/markets', marketsRouter);
 app.use('/api/filings', filingsRouter);
 app.use('/api/crm', crmRouter);
 app.use('/api/postgrid', postgridRouter);
+app.use('/api/billing', billingRouter);
 
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('[api] unhandled error:', err);

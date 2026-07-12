@@ -53,7 +53,7 @@ function loadServiceAccount(): Record<string, unknown> | null {
   return JSON.parse(jsonStr);
 }
 
-function getAdminApp(): App | null {
+export function getAdminApp(): App | null {
   if (adminApp) return adminApp;
   if (initError) return null;
   if (getApps().length > 0) {
