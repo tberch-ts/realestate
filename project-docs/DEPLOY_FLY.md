@@ -94,6 +94,14 @@ Content workflow: `npm -w @mfa/crm run build` from repo root regenerates
 build step (matches beakon's simplicity); a GitHub Actions workflow to
 automate this is a reasonable future upgrade, not done here.
 
+Needs `VITE_GOOGLE_MAPS_API_KEY` (and optionally `VITE_API_URL`) in a repo-root
+`.env` for Hotspots/Property Search to work on the built site — Vite's
+`envDir` in `apps/crm/vite.config.ts` points at the repo root, same file
+`apps/api`/`apps/web` use for local dev. That file's `NODE_ENV=development`
+used to leak into this build and ship an unminified dev-mode React bundle
+(4x the size) — `apps/crm`'s `build` script now forces
+`NODE_ENV=production` via `cross-env` so this can't regress silently.
+
 ### 5. Verify
 
 | Check | Expected |

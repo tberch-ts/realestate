@@ -4,17 +4,30 @@ import { createUserWithEmailAndPassword, signInWithPopup, updateProfile, GoogleA
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { Building2 } from 'lucide-react'
 import { auth, db } from '../lib/firebase'
+import { createCheckoutSession } from '../lib/api'
 import { PLAN_TIERS } from '../types/plan'
 
 const googleProvider = new GoogleAuthProvider()
 
-async function createUserDoc(uid: string, email: string | null, displayName: string | null, planId: string) {
+// Every account starts on the free plan — 'plan' is server-authoritative
+// (see firestore.rules), only the Stripe webhook ever upgrades it. A paid
+// plan picked here just fast-tracks the user straight to Checkout next.
+async function createUserDoc(uid: string, email: string | null, displayName: string | null) {
   await setDoc(doc(db, 'users', uid), {
     email,
     displayName,
-    plan: planId in PLAN_TIERS ? planId : 'free',
+    plan: 'free',
     createdAt: serverTimestamp(),
   })
+}
+
+async function afterSignUp(planId: string, navigate: (path: string, opts?: { replace: boolean }) => void) {
+  if (planId === 'pro' || planId === 'team') {
+    const { url } = await createCheckoutSession(planId)
+    window.location.href = url
+    return
+  }
+  navigate('/app', { replace: true })
 }
 
 export default function SignUp() {
@@ -34,8 +47,8 @@ export default function SignUp() {
     try {
       const cred = await createUserWithEmailAndPassword(auth, email, password)
       if (name.trim()) await updateProfile(cred.user, { displayName: name.trim() })
-      await createUserDoc(cred.user.uid, cred.user.email, name.trim() || null, planId)
-      navigate('/app', { replace: true })
+      await createUserDoc(cred.user.uid, cred.user.email, name.trim() || null)
+      await afterSignUp(planId, navigate)
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -48,8 +61,8 @@ export default function SignUp() {
     setBusy(true)
     try {
       const cred = await signInWithPopup(auth, googleProvider)
-      await createUserDoc(cred.user.uid, cred.user.email, cred.user.displayName, planId)
-      navigate('/app', { replace: true })
+      await createUserDoc(cred.user.uid, cred.user.email, cred.user.displayName)
+      await afterSignUp(planId, navigate)
     } catch (err) {
       setError((err as Error).message)
     } finally {
