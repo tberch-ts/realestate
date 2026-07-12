@@ -116,7 +116,23 @@ async function doFetch(): Promise<ProviderResult<GeoJsonFeatureCollection>> {
     }
 
     // 2. Compute centroid for each neighborhood & score via Census
-    const scored = await scoreNeighborhoods(geojson);
+    const { geojson: scored, withData } = await scoreNeighborhoods(geojson);
+
+    // If not a single neighborhood got real Census data (e.g. CENSUS_API_KEY
+    // missing/invalid — Census now hard-requires a key, redirecting keyless
+    // requests to an HTML "missing key" page instead of erroring), every
+    // composite ties and the rank-normalization below maps "tied for last"
+    // to "ranked 1st" for all of them — i.e. every neighborhood scores 95.
+    // Fail loudly instead of serving that, and don't clobber a previously
+    // good cache with it.
+    if (withData === 0) {
+      const message = 'No neighborhoods returned usable Census data — check CENSUS_API_KEY is set and valid.';
+      if (cache) {
+        console.warn(`[hotspots] ${message} Serving previous cache instead.`);
+        return { provider, status: 'ok', data: cache.data, fetchedAt: new Date(cache.ts).toISOString() };
+      }
+      return { provider, status: 'error', message };
+    }
 
     cache = { data: scored, ts: Date.now() };
     void saveDiskCache();
@@ -126,7 +142,9 @@ async function doFetch(): Promise<ProviderResult<GeoJsonFeatureCollection>> {
   }
 }
 
-async function scoreNeighborhoods(geojson: GeoJsonFeatureCollection): Promise<GeoJsonFeatureCollection> {
+async function scoreNeighborhoods(
+  geojson: GeoJsonFeatureCollection
+): Promise<{ geojson: GeoJsonFeatureCollection; withData: number }> {
   const raw: Array<{ idx: number; income?: number; pop?: number; rent?: number; burdened?: number }> = [];
   const total = geojson.features.length;
   const t0 = Date.now();
@@ -207,7 +225,7 @@ async function scoreNeighborhoods(geojson: GeoJsonFeatureCollection): Promise<Ge
     f.properties.nbhd_name = f.properties.NBHD_NAME ?? f.properties.nbhd_name ?? f.properties.NAME ?? 'Unknown';
   }
 
-  return geojson;
+  return { geojson, withData };
 }
 
 function computeCentroid(geometry: GeoJsonFeature['geometry']): [number, number] {

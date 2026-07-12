@@ -337,19 +337,19 @@ function Row({ k, v }: { k: string; v: string | undefined }) {
 }
 
 function colorForScore(score: number): string {
-  if (score >= 90) return '#10b981'; // emerald-500
-  if (score >= 80) return '#84cc16'; // lime-500
-  if (score >= 60) return '#f59e0b'; // amber-500
-  if (score >= 40) return '#fb923c'; // orange-400
-  return '#64748b'; // slate-500
+  if (score >= 90) return '#ef4444'; // red-500
+  if (score >= 80) return '#f97316'; // orange-500
+  if (score >= 60) return '#eab308'; // yellow-500
+  if (score >= 40) return '#38bdf8'; // sky-400
+  return '#3b82f6'; // blue-500
 }
 
 function scoreTextColor(score: number): string {
-  if (score >= 90) return 'text-emerald-300';
-  if (score >= 80) return 'text-lime-300';
-  if (score >= 60) return 'text-amber-200';
-  if (score >= 40) return 'text-orange-300';
-  return 'text-slate-400';
+  if (score >= 90) return 'text-red-400';
+  if (score >= 80) return 'text-orange-400';
+  if (score >= 60) return 'text-yellow-400';
+  if (score >= 40) return 'text-sky-400';
+  return 'text-blue-400';
 }
 
 // Case-insensitive match across the Data layer features on the nbhd_name property.
