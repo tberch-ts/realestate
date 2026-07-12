@@ -1,13 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import type { MarketKey } from '@mfa/shared';
 import { apiFetch } from '../lib/api';
 import { loadGoogleMaps } from '../lib/googleMaps';
 import { API_URL as API_BASE, GOOGLE_MAPS_API_KEY as MAPS_KEY } from '../lib/runtimeEnv';
-
-const DENVER_CENTER = { lat: 39.7392, lng: -104.9903 };
+import { useMarkets, getStoredMarket, setStoredMarket } from '../lib/markets';
+import MarketSelect from '../components/MarketSelect';
 
 export default function Hotspots() {
+  const { markets } = useMarkets();
+  const [searchParams] = useSearchParams();
+  // Deep-link via ?market=phoenix (e.g. from Followup's market switcher)
+  // wins over the last-picked market in localStorage, which wins over Denver.
+  const [market, setMarket] = useState<MarketKey>((searchParams.get('market') as MarketKey) || getStoredMarket());
   const mapDiv = useRef<HTMLDivElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mapRef = useRef<any>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<{
@@ -19,6 +27,14 @@ export default function Hotspots() {
     rentBurdenedPct?: number;
   } | null>(null);
 
+  const cfg = markets.find((m) => m.key === market);
+
+  function onMarketChange(next: MarketKey) {
+    setMarket(next);
+    setStoredMarket(next);
+    setSelected(null);
+  }
+
   useEffect(() => {
     let cancelled = false;
 
@@ -29,24 +45,38 @@ export default function Hotspots() {
         return;
       }
 
+      setStatus('loading');
+      setError(null);
+
       try {
         const maps = await loadGoogleMaps(MAPS_KEY);
         if (cancelled || !mapDiv.current) return;
 
-        const map = new maps.Map(mapDiv.current, {
-          center: DENVER_CENTER,
+        const center = cfg ? { lat: cfg.center[1], lng: cfg.center[0] } : { lat: 39.7392, lng: -104.9903 };
+
+        const map = mapRef.current ?? new maps.Map(mapDiv.current, {
           zoom: 11,
           styles: DARK_MAP_STYLE,
           disableDefaultUI: false,
           clickableIcons: false,
         });
+        mapRef.current = map;
+        map.setCenter(center);
+        // Clear any polygons from a previous market before loading the new one.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        map.data.forEach((f: any) => map.data.remove(f));
 
         setStatus('ready');
 
-        const res = await apiFetch(`${API_BASE}/api/hotspots/denver`);
+        const res = await apiFetch(`${API_BASE}/api/hotspots/${market}`);
         if (!res.ok) throw new Error(`API ${res.status}`);
         const body = await res.json();
         if (cancelled) return;
+        if (body.status !== 'ok') {
+          setError(body.message ?? 'Hotspots not available for this market yet.');
+          setStatus('error');
+          return;
+        }
 
         map.data.addGeoJson(body.data);
         map.data.setStyle((feature: unknown) => {
@@ -84,18 +114,22 @@ export default function Hotspots() {
     return () => {
       cancelled = true;
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [market]);
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Denver deal zones</h1>
+          <h1 className="text-2xl font-bold">{cfg?.label ?? 'Deal zones'}</h1>
           <p className="text-gray-500 text-sm">
             Neighborhoods scored by market fundamentals (income, rent, population, rent burden).
           </p>
         </div>
-        <Legend />
+        <div className="flex items-center gap-3">
+          <MarketSelect value={market} onChange={onMarketChange} capability="neighborhoodsSupported" />
+          <Legend />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
@@ -104,7 +138,8 @@ export default function Hotspots() {
         <aside className="space-y-3">
           {status === 'loading' && (
             <div className="p-4 rounded border text-gray-300 text-sm" style={{ borderColor: 'var(--border)', background: 'var(--bg-card)' }}>
-              Loading map and scoring neighborhoods (first load takes 15–30s)…
+              Loading map and scoring neighborhoods (first load can take a minute — subsequent
+              loads are served from a 24h cache)…
             </div>
           )}
           {error && (
@@ -123,7 +158,7 @@ export default function Hotspots() {
                 <Row k="Rent-burdened 50%+" v={fmtNum(selected.rentBurdenedPct)} />
               </dl>
               <Link
-                to={`/app/followup?zone=${encodeURIComponent(selected.name)}`}
+                to={`/app/followup?market=${market}&zone=${encodeURIComponent(selected.name)}`}
                 className="mt-3 inline-block text-xs text-blue-400 hover:text-blue-300"
               >
                 Follow-up candidates in this zone →
