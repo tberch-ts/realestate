@@ -15,7 +15,7 @@ export default function Contacts() {
 
   useEffect(() => {
     if (!user) return
-    return onSnapshot(query(collection(db, 'contacts'), where('userId', '==', user.uid)), (snap) =>
+    return onSnapshot(query(collection(db, 'contacts'), where('ownerId', '==', user.uid)), (snap) =>
       setContacts(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Contact))
     )
   }, [user])
@@ -26,7 +26,7 @@ export default function Contacts() {
     setBusy(true)
     try {
       await addDoc(collection(db, 'contacts'), {
-        userId: user.uid,
+        ownerId: user.uid,
         name: name.trim(),
         kind: 'other',
         createdAt: serverTimestamp(),

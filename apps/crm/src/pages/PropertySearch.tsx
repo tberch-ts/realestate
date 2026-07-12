@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import type { PropertySnapshot } from '@mfa/shared';
 import { Search } from 'lucide-react';
 import { fetchProperty } from '../lib/api';
@@ -6,20 +7,31 @@ import ProviderPanel from '../components/ProviderPanel';
 import BuyBoxCard from '../components/BuyBoxCard';
 
 export default function PropertySearch() {
-  const [address, setAddress] = useState('');
+  const [params] = useSearchParams();
+  const [address, setAddress] = useState(params.get('address') ?? '');
   const [snapshot, setSnapshot] = useState<PropertySnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  function handleSearch(e: React.FormEvent) {
-    e.preventDefault();
-    if (!address.trim()) return;
+  function search(addr: string) {
+    if (!addr.trim()) return;
     setLoading(true);
     setError(null);
-    fetchProperty(address.trim())
+    fetchProperty(addr.trim())
       .then(setSnapshot)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    const fromQuery = params.get('address');
+    if (fromQuery) search(fromQuery);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function handleSearch(e: React.FormEvent) {
+    e.preventDefault();
+    search(address);
   }
 
   return (

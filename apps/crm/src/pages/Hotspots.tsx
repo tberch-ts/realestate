@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
 import { loadGoogleMaps } from '../lib/googleMaps';
 import { API_URL as API_BASE, GOOGLE_MAPS_API_KEY as MAPS_KEY } from '../lib/runtimeEnv';
@@ -121,6 +122,12 @@ export default function Hotspots() {
                 <Row k="Population (tract)" v={fmtNum(selected.population)} />
                 <Row k="Rent-burdened 50%+" v={fmtNum(selected.rentBurdenedPct)} />
               </dl>
+              <Link
+                to={`/app/followup?zone=${encodeURIComponent(selected.name)}`}
+                className="mt-3 inline-block text-xs text-blue-400 hover:text-blue-300"
+              >
+                Follow-up candidates in this zone →
+              </Link>
             </div>
           )}
           {!selected && status === 'ready' && (
