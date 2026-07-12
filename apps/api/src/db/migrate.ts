@@ -1,4 +1,7 @@
-import 'dotenv/config';
+// Loads .env from the monorepo root regardless of cwd — `dotenv/config`'s
+// default lookup is cwd-relative, which breaks when this runs via `npm run
+// db:migrate` (cwd = apps/api, not the repo root where .env actually lives).
+import '../loadEnv.js';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';

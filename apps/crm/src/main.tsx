@@ -19,6 +19,7 @@ import ContactDetail from './pages/ContactDetail';
 import Loi from './pages/Loi';
 import Hotspots from './pages/Hotspots';
 import Settings from './pages/Settings';
+import BillingSettings from './pages/BillingSettings';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
@@ -44,7 +45,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
               <Route path="capital" element={<ComingSoon feature="Capital Raise" />} />
               <Route path="learn" element={<ComingSoon feature="Learn" />} />
               <Route path="settings" element={<Settings />} />
-              <Route path="settings/billing" element={<ComingSoon feature="Billing" />} />
+              <Route path="settings/billing" element={<BillingSettings />} />
             </Route>
           </Route>
         </Routes>

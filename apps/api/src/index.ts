@@ -1,9 +1,5 @@
-import { config as loadEnv } from 'dotenv';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
-// Load .env from repo root (monorepo) regardless of npm workspace cwd
-const __dirname = dirname(fileURLToPath(import.meta.url));
-loadEnv({ path: join(__dirname, '../../../.env') });
+// Must be the first import — see loadEnv.ts for why.
+import './loadEnv.js';
 
 import express from 'express';
 import cors from 'cors';
@@ -24,6 +20,11 @@ import { marketsRouter } from './routes/markets.js';
 import { filingsRouter } from './routes/filings.js';
 import { crmRouter } from './routes/crm.js';
 import { postgridRouter } from './routes/postgrid.js';
+import { stripeWebhooksRouter } from './routes/stripeWebhooks.js';
+import { billingRouter } from './routes/billing.js';
+import { invoicesRouter } from './routes/invoices.js';
+import { terminalRouter } from './routes/terminal.js';
+import { connectRouter } from './routes/connect.js';
 import { warmDenverHotspots } from './providers/denverNeighborhoods.js';
 import { warmDenverPortfolio } from './providers/denverPortfolio.js';
 
@@ -61,6 +62,13 @@ app.use(
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-mfa-dev-mode'],
   })
 );
+
+// Stripe webhooks need the raw request body for signature verification, so
+// this router (which applies express.raw() itself) must be mounted before
+// the global express.json() below, and before the firebaseAuth/basicAuth
+// gate — Stripe calls this endpoint directly, not through a signed-in user.
+app.use('/api/webhooks', stripeWebhooksRouter);
+
 app.use(express.json({ limit: '1mb' }));
 
 app.get('/health', (_req, res) => {
@@ -107,6 +115,10 @@ app.use('/api/markets', marketsRouter);
 app.use('/api/filings', filingsRouter);
 app.use('/api/crm', crmRouter);
 app.use('/api/postgrid', postgridRouter);
+app.use('/api/billing', billingRouter);
+app.use('/api/invoices', invoicesRouter);
+app.use('/api/terminal', terminalRouter);
+app.use('/api/connect', connectRouter);
 
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('[api] unhandled error:', err);
