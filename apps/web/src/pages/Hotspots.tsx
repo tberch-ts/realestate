@@ -1,16 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import type { FollowupResult, FollowupScored } from '@mfa/shared';
+import type { FollowupResult, FollowupScored, MarketKey } from '@mfa/shared';
 import { apiFetch, fetchFollowup } from '../lib/api';
 import { loadGoogleMaps } from '../lib/googleMaps';
 import { API_URL as API_BASE, GOOGLE_MAPS_API_KEY as MAPS_KEY } from '../lib/runtimeEnv';
-
-const DENVER_CENTER = { lat: 39.7392, lng: -104.9903 };
+import { useMarkets, getStoredMarket, setStoredMarket } from '../lib/markets';
+import MarketSelect from '../components/MarketSelect';
 
 export default function Hotspots() {
   const [searchParams] = useSearchParams();
   const focusZone = searchParams.get('focus');
+  const { markets } = useMarkets();
+  const [market, setMarket] = useState<MarketKey>((searchParams.get('market') as MarketKey) || getStoredMarket());
+  const cfg = markets.find((m) => m.key === market);
   const mapDiv = useRef<HTMLDivElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mapRef = useRef<any>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<{
@@ -25,6 +30,12 @@ export default function Hotspots() {
   const [followupLoading, setFollowupLoading] = useState(false);
   const [followupError, setFollowupError] = useState<string | null>(null);
 
+  function onMarketChange(next: MarketKey) {
+    setMarket(next);
+    setStoredMarket(next);
+    setSelected(null);
+  }
+
   useEffect(() => {
     let cancelled = false;
 
@@ -37,25 +48,40 @@ export default function Hotspots() {
         return;
       }
 
+      setStatus('loading');
+      setError(null);
+      setSelected(null);
+
       try {
         const maps = await loadGoogleMaps(MAPS_KEY);
         if (cancelled || !mapDiv.current) return;
 
-        const map = new maps.Map(mapDiv.current, {
-          center: DENVER_CENTER,
+        const center = cfg ? { lat: cfg.center[1], lng: cfg.center[0] } : { lat: 39.7392, lng: -104.9903 };
+
+        const map = mapRef.current ?? new maps.Map(mapDiv.current, {
           zoom: 11,
           styles: DARK_MAP_STYLE,
           disableDefaultUI: false,
           clickableIcons: false,
         });
+        mapRef.current = map;
+        map.setCenter(center);
+        // Clear any polygons from a previous market before loading the new one.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        map.data.forEach((f: any) => map.data.remove(f));
 
         setStatus('ready');
 
         // Fetch scored GeoJSON
-        const res = await apiFetch(`${API_BASE}/api/hotspots/denver`);
+        const res = await apiFetch(`${API_BASE}/api/hotspots/${market}`);
         if (!res.ok) throw new Error(`API ${res.status}`);
         const body = await res.json();
         if (cancelled) return;
+        if (body.status !== 'ok') {
+          setError(body.message ?? 'Hotspots not available for this market yet.');
+          setStatus('error');
+          return;
+        }
         const geojson = body.data;
 
         map.data.addGeoJson(geojson);
@@ -125,7 +151,8 @@ export default function Hotspots() {
     return () => {
       cancelled = true;
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [market]);
 
   // Load follow-up candidates when a zone is selected.
   useEffect(() => {
@@ -137,7 +164,7 @@ export default function Hotspots() {
     let cancelled = false;
     setFollowupLoading(true);
     setFollowupError(null);
-    fetchFollowup(selected.name, { limit: 5 })
+    fetchFollowup(market, selected.name, { limit: 5 })
       .then((r) => {
         if (!cancelled) setFollowup(r);
       })
@@ -150,23 +177,26 @@ export default function Hotspots() {
     return () => {
       cancelled = true;
     };
-  }, [selected?.name]);
+  }, [market, selected?.name]);
 
   return (
     <div className="min-h-screen px-6 py-6">
       <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
           <div>
             <Link to="/" className="text-sm text-indigo-400 hover:text-indigo-300">
               ← Home
             </Link>
-            <h1 className="text-2xl font-bold mt-2">Denver deal zones</h1>
+            <h1 className="text-2xl font-bold mt-2">{cfg?.label ?? 'Deal zones'}</h1>
             <p className="text-slate-400 text-sm">
               Neighborhoods scored by market fundamentals (income, rent, population, rent burden).
               Click a zone for details.
             </p>
           </div>
-          <Legend />
+          <div className="flex items-center gap-3">
+            <MarketSelect value={market} onChange={onMarketChange} capability="neighborhoodsSupported" />
+            <Legend />
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
@@ -178,8 +208,8 @@ export default function Hotspots() {
           <aside className="space-y-3">
             {status === 'loading' && (
               <div className="p-4 rounded border border-slate-800 bg-slate-900/40 text-slate-300 text-sm">
-                Loading map and scoring neighborhoods (first load pulls Census data for ~78
-                neighborhoods — takes 15–30s)…
+                Loading map and scoring neighborhoods (first load pulls Census data for every
+                neighborhood in this market — can take up to a minute; cached for 24h after)…
               </div>
             )}
             {error && (
@@ -204,7 +234,7 @@ export default function Hotspots() {
                   <Row k="Rent-burdened 50%+" v={fmtNum(selected.rentBurdenedPct)} />
                 </dl>
                 <Link
-                  to={`/?q=${encodeURIComponent(selected.name + ', Denver, CO')}`}
+                  to={`/?q=${encodeURIComponent(selected.name + (cfg ? `, ${cfg.label}` : ''))}`}
                   className="mt-4 block text-center px-4 py-2 rounded bg-indigo-500 hover:bg-indigo-400 font-semibold text-white text-sm"
                 >
                   Search an address here →
@@ -213,6 +243,8 @@ export default function Hotspots() {
             )}
             {selected && (
               <FollowupPanel
+                market={market}
+                locationLabel={cfg?.label ?? ''}
                 zone={selected.name}
                 loading={followupLoading}
                 error={followupError}
@@ -254,11 +286,15 @@ function Legend() {
 }
 
 function FollowupPanel({
+  market,
+  locationLabel,
   zone,
   loading,
   error,
   result,
 }: {
+  market: MarketKey;
+  locationLabel: string;
   zone: string;
   loading: boolean;
   error: string | null;
@@ -269,12 +305,12 @@ function FollowupPanel({
       <div className="flex items-baseline justify-between mb-3">
         <h4 className="text-sm font-semibold text-slate-100">Follow-up candidates</h4>
         {result && (
-          <Link to={`/followup?zone=${encodeURIComponent(zone)}`} className="text-xs text-indigo-400 hover:text-indigo-300">
+          <Link to={`/followup?market=${market}&zone=${encodeURIComponent(zone)}`} className="text-xs text-indigo-400 hover:text-indigo-300">
             See all {result.count} →
           </Link>
         )}
       </div>
-      {loading && <p className="text-sm text-slate-400">Querying Denver parcels…</p>}
+      {loading && <p className="text-sm text-slate-400">Querying {locationLabel || 'market'} parcels…</p>}
       {error && <p className="text-sm text-rose-400">{error}</p>}
       {result && result.count === 0 && (
         <p className="text-sm text-slate-500">
@@ -284,7 +320,7 @@ function FollowupPanel({
       {result && result.candidates.length > 0 && (
         <ul className="space-y-2">
           {result.candidates.map((c) => (
-            <FollowupRow key={c.parcelId ?? c.address} c={c} />
+            <FollowupRow key={c.parcelId ?? c.address} c={c} locationLabel={locationLabel} />
           ))}
         </ul>
       )}
@@ -292,11 +328,12 @@ function FollowupPanel({
   );
 }
 
-function FollowupRow({ c }: { c: FollowupScored }) {
+function FollowupRow({ c, locationLabel }: { c: FollowupScored; locationLabel: string }) {
+  const fullAddress = locationLabel ? `${c.address}, ${locationLabel}` : c.address;
   return (
     <li className="p-2 rounded border border-slate-800/60 bg-slate-950/40 hover:bg-slate-900/70">
       <Link
-        to={`/property?address=${encodeURIComponent(c.address + ', Denver, CO')}`}
+        to={`/property?address=${encodeURIComponent(fullAddress)}`}
         className="block"
       >
         <div className="flex items-start justify-between gap-2">
