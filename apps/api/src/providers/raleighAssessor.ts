@@ -1,52 +1,59 @@
 import type { AssessorRecord, GeocodedAddress, ProviderResult } from '@mfa/shared';
 
-// Wake County / Raleigh — free ArcGIS service shared by Wake County GIS
-// and the City of Raleigh at maps.raleighnc.gov/arcgis/rest/services/.
-// Data comes from the Wake County Revenue Department's CAMA system
-// (iMAPS is the public UI). No API key.
+// Wake County / Raleigh — free ArcGIS service published by the City of
+// Raleigh at maps.raleighnc.gov/arcgis/rest/services/. Data comes from
+// the Wake County Revenue Department's CAMA system (iMAPS is the public
+// UI). No API key.
 //
-// Wake publishes a `Parcels` MapServer that joins ownership + CAMA
-// attributes. The feature layer we want is layer 0 of the public
-// Parcels service.
+// IMPORTANT: the service is NOT at `Parcels/MapServer` (that path
+// 404s-as-499 — ArcGIS Server returns `{"error":{"code":499,"message":
+// "Token Required"}}` for a nonexistent service/folder combo instead of
+// a clean 404, which looks identical to a real auth failure). The
+// catalog root (`/arcgis/rest/services?f=json`) shows the actual
+// service lives in the `Property` folder as `Property/Property`, both
+// as a MapServer and a FeatureServer. Confirmed live via curl on
+// 2026-07-13: `Property/Property/FeatureServer/0?f=json` returns real
+// metadata with no token, and a live query against layer 0 returns
+// parcel attributes anonymously.
+//
+// Layer 0 ("Property") is the parcel polygon layer with ownership +
+// CAMA attributes joined in.
 const RALEIGH_PARCELS =
-  'https://maps.raleighnc.gov/arcgis/rest/services/Parcels/MapServer/0/query';
+  'https://maps.raleighnc.gov/arcgis/rest/services/Property/Property/FeatureServer/0/query';
 
-// Schema reflects Wake's CAMA column names. Note that Wake uses REID
-// (Real Estate Identification) as the primary key — distinct from
-// Mecklenburg's PID.
+// Schema reflects the live field list from the Property/Property
+// FeatureServer (layer 0), verified via `?f=json` on the layer and a
+// sample query. Wake uses REID (Real Estate Identification) as the
+// primary key — distinct from Mecklenburg's PID — with PIN_NUM as the
+// secondary tax-roll id.
 interface WakeParcelAttrs {
   REID?: string;                  // 7-digit Real Estate ID
-  PIN?: string;                   // 10-digit parcel ID (tax roll)
+  PIN_NUM?: string;                // 11-digit parcel ID (tax roll)
   OWNER?: string;
-  MAILING_ADDRESS_1?: string;
-  MAILING_ADDRESS_2?: string;
-  MAILING_CITY?: string;
-  MAILING_STATE?: string;
-  MAILING_ZIP?: string;
-  SITE_ADDRESS?: string;          // Full situs
-  PROPERTY_STREET_NUMBER?: string;
-  PROPERTY_STREET_NAME?: string;
-  PROPERTY_CITY?: string;
+  ADDR1?: string;                  // Mailing address line 1
+  ADDR2?: string;                  // Mailing address line 2 (city/state/zip)
+  ADDR3?: string;
+  SITE_ADDRESS?: string;           // Full situs, e.g. "1060 S MAIN ST"
+  CITY_DECODE?: string;
   // Valuation
   TOTAL_VALUE_ASSD?: number;
-  BUILDING_VALUE_ASSD?: number;
-  LAND_VALUE_ASSD?: number;
+  BLDG_VAL?: number;
+  LAND_VAL?: number;
   // Building
   YEAR_BUILT?: number;
-  TOTAL_STRUCTURES?: number;
-  UNITS?: number;
-  HEATED_AREA?: number;           // Common residential field
-  TOTAL_SALES_AREA?: number;      // Gross area on commercial
-  PHYSICAL_CITY?: string;
+  TOTSTRUCTS?: number;
+  TOTUNITS?: number;
+  HEATEDAREA?: number;             // Heated/finished area, sqft
   // Land
-  DEEDED_ACREAGE?: number;        // Acres
-  LAND_CLASS?: string;
-  // Use classification — Wake uses SPECIAL_DISTRICTS + LAND_CLASS
-  PROPERTY_USE?: string;
-  PROPERTY_DESC?: string;
+  DEED_ACRES?: number;             // Acres
+  LAND_CLASS_DECODE?: string;
+  // Use classification
+  TYPE_USE_DECODE?: string;
+  PROPDESC?: string;
+  BILLING_CLASS_DECODE?: string;
   // Sale
   TOTSALPRICE?: number;
-  SALE_DATE?: number;             // epoch ms
+  SALE_DATE?: number;              // epoch ms
 }
 
 interface FeatureServerResponse {
@@ -105,20 +112,18 @@ function toRecord(a: WakeParcelAttrs): AssessorRecord {
   // Land area comes as acres in Wake's schema. Convert to sqft to match
   // the AssessorRecord contract.
   let lotSqft: number | undefined;
-  const acres = num(a.DEEDED_ACREAGE);
+  const acres = num(a.DEED_ACRES);
   if (acres != null) lotSqft = Math.round(acres * 43560);
 
-  const sqft = num(a.TOTAL_SALES_AREA) ?? num(a.HEATED_AREA);
-
   return {
-    parcelId: str(a.REID) ?? str(a.PIN),
+    parcelId: str(a.REID) ?? str(a.PIN_NUM),
     owner: str(a.OWNER),
     assessedValue: num(a.TOTAL_VALUE_ASSD),
     yearBuilt: num(a.YEAR_BUILT),
-    units: num(a.UNITS),
-    sqft,
+    units: num(a.TOTUNITS),
+    sqft: num(a.HEATEDAREA),
     lotSqft,
-    propertyClass: str(a.PROPERTY_DESC) ?? str(a.PROPERTY_USE) ?? str(a.LAND_CLASS),
+    propertyClass: str(a.TYPE_USE_DECODE) ?? str(a.PROPDESC) ?? str(a.LAND_CLASS_DECODE),
     lastSalePrice: a.TOTSALPRICE && a.TOTSALPRICE > 0 ? a.TOTSALPRICE : undefined,
     lastSaleDate: saleDate,
     source: 'wake_nc',

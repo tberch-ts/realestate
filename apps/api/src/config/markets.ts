@@ -47,16 +47,18 @@ export const MARKETS: ReadonlyArray<MarketConfig> = [
     countyFips: '48453',
     countyName: 'Travis',
     center: [-97.7431, 30.2672],
-    // TCAD has no public REST API — portal-only. Provider returns
-    // not_available with a link to the portal. We'll enable this once we
-    // wire up one of (a) a credentialed TCAD data export, (b) Travis
-    // County Open Data, or (c) a state-wide CAD scraper.
-    assessorSupported: false,
+    // TCAD itself (traviscad.org) still has no public REST API, but
+    // Travis County TNR publishes the TCAD tax-roll parcel layer for
+    // free via ArcGIS (taxmaps.traviscountytx.gov) — re-verified live
+    // 2026-07-13. No unit count / sqft / sale price in this feed (see
+    // austinAssessor.ts header for why), but owner, market value, year
+    // built, lot size, and property class are real and live.
+    assessorSupported: true,
     sosSupported: false,
     neighborhoodsSupported: false,
     followupSupported: false,
     portfolioSupported: false,
-    notes: 'TCAD portal-only. See project-docs/data-sources-by-msa.md for plan.',
+    notes: 'Travis County TNR parcel feed live (no units/sqft/sale price). See project-docs/data-sources-by-msa.md.',
   },
   {
     key: 'nashville',

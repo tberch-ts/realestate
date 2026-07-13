@@ -1,42 +1,71 @@
 import type { AssessorRecord, GeocodedAddress, ProviderResult } from '@mfa/shared';
 
 // Metro Nashville / Davidson County — free ArcGIS MapServer published by
-// the Metro Nashville GIS group at maps.nashville.gov. The Cadastral
-// service exposes an Ownership Parcels layer with APN, owner, situs,
-// assessed values, and year built. No API key.
+// Metro Nashville GIS ("MetroGIS") at maps.nashville.gov.
 //
-// We hit Cadastral/Parcels_SP which is the spatial-projected variant
-// (WGS84) — same schema as /Cadastral/Parcels but friendlier for us.
+// The previously hardcoded path (`Cadastral/Parcels_SP/MapServer/0`) does
+// not exist on this server — `<url>?f=json` returns a real ArcGIS 500
+// "Service ... not found" (not a casing/token gateway issue like Denver's
+// bug). Walking the service catalog (`/arcgis/rest/services?f=json` ->
+// `Cadastral` folder -> `?f=json`) shows the real, live services are:
+//   - Cadastral/Parcels           (id 0 = "Ownership Parcels")  <- this one
+//   - Cadastral/Cadastral_Layers  (id 4 = "Ownership Parcels", plus
+//     Dimensions/Subdivision/Lot Polygon/House Numbers)
+// Both expose the same "Ownership Parcels" feature layer; we use the
+// dedicated Cadastral/Parcels service since it's the documented parcel
+// boundary + ownership/valuation dataset. Verified live 2026-07-13 via
+// curl: `.../Cadastral/Parcels/MapServer/0?f=json` returns real layer
+// metadata, and a query with `where=PropAddr LIKE '222 %'` returns real
+// matching parcels (owner, assessed value, land use, sale price/date).
+//
+// IMPORTANT: unlike Denver's assessor dataset, this Davidson County
+// cadastral layer does NOT carry building characteristics — there is no
+// year-built, unit-count, or building-square-footage column. It's a
+// parcel/ownership/valuation layer, not a full CAMA record. yearBuilt,
+// units, and sqft are intentionally left undefined below; lotSqft is
+// derived from the `Acres` field (converted to square feet) since that's
+// the only area field present.
 const NASHVILLE_PARCELS =
-  'https://maps.nashville.gov/arcgis/rest/services/Cadastral/Parcels_SP/MapServer/0/query';
+  'https://maps.nashville.gov/arcgis/rest/services/Cadastral/Parcels/MapServer/0/query';
 
-// Field names pulled from the layer's metadata. Nashville's schema is
-// simpler than Denver's — no separate commercial/residential columns,
-// but year built and square footage can be missing on vacant parcels.
+const ACRES_TO_SQFT = 43560;
+
+// Field names confirmed live against the layer's `?f=json` metadata and a
+// sample query (`where=1=1`, `where=PropAddr LIKE '...'`).
 interface DavidsonParcelAttrs {
-  APN?: string;                   // Parcel ID (primary key, printed "###-##-#-###")
-  PROP_ADDR?: string;             // Situs address
-  PROP_ZIP?: string;
-  OWNER_NAME?: string;
-  OWNER_ADDR_1?: string;
-  OWNER_ADDR_2?: string;
-  OWNER_CITY?: string;
-  OWNER_STATE?: string;
-  OWNER_ZIP?: string;
-  LAND_USE?: string;              // Use code / description (e.g. 'APARTMENT >10 UNITS')
-  LAND_USE_DESC?: string;
-  // Value/area fields
-  LAND_VALUE?: number;
-  IMPROVE_VALUE?: number;
-  TOTAL_VALUE?: number;
-  ASSESSED_VALUE?: number;
-  BLDG_SQ_FT?: number;
-  LOT_SIZE?: number;              // Square feet
-  YEAR_BUILT?: number;
-  NO_UNITS?: number;
-  // Sale — Nashville publishes DATE as epoch ms, PRICE as numeric.
-  SALE_DATE?: number;
-  SALE_PRICE?: number;
+  APN?: string;                   // Parcel ID, e.g. "09306201200"
+  Owner?: string;
+  OwnAddr1?: string;
+  OwnAddr2?: string;
+  OwnAddr3?: string;
+  OwnCity?: string;
+  OwnState?: string;
+  OwnZip?: string;
+  PropAddr?: string;              // Full situs address, e.g. "316 BROADWAY"
+  PropHouse?: string;
+  PropStreet?: string;
+  PropCity?: string;
+  PropState?: string;
+  PropZip?: string;
+  LUCode?: string;                // Land-use code, e.g. "038"
+  LUDesc?: string;                // Land-use description, e.g.
+                                   // "APARTMENT: LOW RISE (BUILT SINCE 1960)"
+  // Value fields — Appr = appraised (market), Assd = assessed (taxable).
+  LandAppr?: number;
+  ImprAppr?: number;
+  TotlAppr?: number;
+  LandAssd?: number;
+  ImprAssd?: number;
+  TotlAssd?: number;
+  // Area — no building sqft column exists on this layer; Acres/
+  // StatedArea/DeededAcreage are all land area in acres.
+  Acres?: number;
+  StatedArea?: number;
+  DeededAcreage?: number;
+  SalePrice?: number;
+  // OwnDate is the deed/transfer date backing Owner + SalePrice
+  // (epoch ms, matches SaleCode/OwnInstr deed reference fields).
+  OwnDate?: number;
 }
 
 interface FeatureServerResponse {
@@ -65,7 +94,11 @@ export async function fetchNashvilleAssessor(
     }
 
     const url = new URL(NASHVILLE_PARCELS);
-    url.searchParams.set('where', `PROP_ADDR LIKE '${addr.replace(/'/g, "''")}%'`);
+    // PropAddr holds the full situs address (e.g. "316 BROADWAY"); a
+    // prefix LIKE matches regardless of trailing unit/suite text. Note
+    // PropStreet alone sometimes carries a leading space in this dataset,
+    // so PropAddr is the more reliable match target.
+    url.searchParams.set('where', `PropAddr LIKE '${addr.replace(/'/g, "''")}%'`);
     url.searchParams.set('outFields', '*');
     url.searchParams.set('f', 'json');
     url.searchParams.set('resultRecordCount', '1');
@@ -90,18 +123,23 @@ export async function fetchNashvilleAssessor(
 }
 
 function toRecord(a: DavidsonParcelAttrs): AssessorRecord {
-  const saleDate = a.SALE_DATE ? new Date(a.SALE_DATE).toISOString().slice(0, 10) : undefined;
+  const saleDate = a.OwnDate ? new Date(a.OwnDate).toISOString().slice(0, 10) : undefined;
+
+  const acres = num(a.Acres) ?? num(a.DeededAcreage) ?? num(a.StatedArea);
 
   return {
     parcelId: str(a.APN),
-    owner: str(a.OWNER_NAME),
-    assessedValue: num(a.TOTAL_VALUE) ?? num(a.ASSESSED_VALUE),
-    yearBuilt: num(a.YEAR_BUILT),
-    units: num(a.NO_UNITS),
-    sqft: num(a.BLDG_SQ_FT),
-    lotSqft: num(a.LOT_SIZE),
-    propertyClass: str(a.LAND_USE_DESC) ?? str(a.LAND_USE),
-    lastSalePrice: a.SALE_PRICE && a.SALE_PRICE > 0 ? a.SALE_PRICE : undefined,
+    owner: str(a.Owner),
+    assessedValue: num(a.TotlAssd) || num(a.TotlAppr),
+    // Not published on this layer — Davidson's cadastral/GIS parcel
+    // dataset has no building-characteristics columns (see file header).
+    yearBuilt: undefined,
+    units: undefined,
+    sqft: undefined,
+    lotSqft: acres !== undefined ? Math.round(acres * ACRES_TO_SQFT) : undefined,
+    propertyClass: str(a.LUDesc) ?? str(a.LUCode),
+    // SalePrice = 0 or null is the "no recorded sale" sentinel here too.
+    lastSalePrice: a.SalePrice && a.SalePrice > 0 ? a.SalePrice : undefined,
     lastSaleDate: saleDate,
     source: 'davidson_tn',
   };

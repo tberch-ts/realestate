@@ -2,8 +2,18 @@ import type { ProviderResult } from '@mfa/shared';
 
 const LABEL: Record<string, string> = {
   google_geocoding: 'Google Geocoding',
+  assessor: 'County Assessor',
   denver_assessor: 'Denver Assessor',
+  phoenix_assessor: 'Phoenix Assessor (Maricopa Co.)',
+  austin_assessor: 'Austin Assessor (Travis Co.)',
+  nashville_assessor: 'Nashville Assessor (Davidson Co.)',
+  charlotte_assessor: 'Charlotte Assessor (Mecklenburg Co.)',
+  tampa_assessor: 'Tampa Assessor (Hillsborough Co.)',
+  raleigh_assessor: 'Raleigh Assessor (Wake Co.)',
   census_acs: 'US Census (ACS)',
+  bls_ces: 'BLS Employment',
+  fbi_ucr: 'FBI Crime Data (UCR)',
+  landlord_friendliness: 'Landlord Friendliness',
   hud_fmr: 'HUD Fair Market Rents',
   attom: 'ATTOM Data',
   rentcast: 'RentCast',

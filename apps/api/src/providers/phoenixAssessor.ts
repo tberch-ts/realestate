@@ -1,61 +1,65 @@
 import type { AssessorRecord, GeocodedAddress, ProviderResult } from '@mfa/shared';
 
-// Maricopa County Assessor — free ArcGIS FeatureServer published by the
-// Maricopa County Recorder's/Assessor's office via their Open Data portal
-// (data-maricopa.opendata.arcgis.com).
+// Maricopa County Assessor — free hosted ArcGIS FeatureServer view
+// ("ASR_Parcels") published by Maricopa County GIS. No API key required;
+// default ArcGIS hosted-service quota.
 //
-// The parcel layer carries owner, situs address, year built, square
-// footage, living area, tax roll value, last sale info, and land use.
-// No API key required; polite rate limit (default ArcGIS quota).
+// VERIFIED LIVE 2026-07-13: hit `${PHOENIX_PARCELS}?f=json` (drop the
+// trailing `/query`) and confirmed real layer metadata + a real address
+// query (`8130 W INDIAN SCHOOL RD` in Phoenix) returned a genuine parcel —
+// owner "MCP TIDES ON WEST INDIAN SCHOOL OWNER LLC", a 100+ unit apartment
+// complex, sale price $37,860,000, sale date 2021-03-01, full cash value
+// $30,492,500. Not a guess — this is the confirmed live schema.
 //
-// NOTE on layer URL: Maricopa republishes the layer periodically and the
-// exact service slug has changed. The stable public URL lives in the
-// Open Data catalog at:
-//   https://data-maricopa.opendata.arcgis.com/datasets/c937f17330f64e64abd41976fc8bb17f
-// which currently points at the `Parcels` FeatureServer below. If the
-// slug changes, bump PHOENIX_PARCELS — no other code needs to move.
+// The previous URL (`services6.arcgis.com/btCzjPTmhHGPvKkG/.../Parcels/
+// FeatureServer/0`) is dead — that org id no longer resolves (ArcGIS
+// returns `{"error":{"code":400,"message":"Invalid URL"}}` even with the
+// correct lowercase `arcgis` path segment). This replacement was found via
+// the ArcGIS Online Sharing REST API (`sharing/rest/search` scoped to
+// Maricopa's `ykpntM6e3tHvzKRJ` org) and belongs to the item titled
+// "Parcel Data" (owner `MaricopaCountyGIS`, item id
+// `4c0a493411514600a6f7ffdc67d41e82`), which is a hosted *view* over the
+// Assessor's real parcel table (displayField `PropertyStreetName`).
+//
+// If this slug ever moves again, re-run the sharing/rest/search query
+// above and swap PHOENIX_PARCELS — no other code needs to move.
 const PHOENIX_PARCELS =
-  'https://services6.arcgis.com/btCzjPTmhHGPvKkG/ArcGIS/rest/services/Parcels/FeatureServer/0/query';
+  'https://services.arcgis.com/ykpntM6e3tHvzKRJ/arcgis/rest/services/Parcel_Data_View/FeatureServer/0/query';
 
-// Field names mirror the public layer schema. Not every field is
-// guaranteed to be present across all parcel types (commercial vs
-// residential differ); we coalesce on read.
+// Field names below are the CONFIRMED live schema (pulled from
+// `.../FeatureServer/0?f=json` and cross-checked against a real query
+// result), not a guess. No per-parcel unit-count field exists on this
+// layer — `PropertyUseDescription` only carries bucketed ranges like
+// "APARTMENTS 25 - 99 UNITS 2 STORY", so `units` is left undefined rather
+// than parsed out of a range.
 interface MaricopaParcelAttrs {
-  APN?: string;                    // 8-digit Assessor Parcel Number (primary key)
-  OWNER_NAME?: string;
-  OWNER_ADDRESS?: string;
-  OWNER_CITY?: string;
-  OWNER_STATE?: string;
-  OWNER_ZIP?: string;
-  // Situs (property) address components — Maricopa splits number/street
-  SITUS_HSNO?: string;             // House number
-  SITUS_HSSUF?: string;            // Suffix (A, 1/2 etc)
-  SITUS_STDIR?: string;            // N/S/E/W
-  SITUS_STREET?: string;
-  SITUS_SUFFIX?: string;           // RD/ST/AVE
-  SITUS_CITY?: string;
-  SITUS_ZIP?: string;
-  // Situs as a single prejoined string (exists on some layer versions).
-  SITUS_ADDRESS?: string;
-  YEAR_BUILT?: number;
-  // Building area variants — commercial parcels populate TOTAL_BLDG_SQFT,
-  // residential parcels populate LIVING_AREA.
-  TOTAL_BLDG_SQFT?: number;
-  LIVING_AREA?: number;
-  LAND_AREA?: number;              // In acres on this layer; we convert
-  LAND_AREA_SF?: number;           // Sometimes pre-converted
-  // Use code classification — 1xxx residential, 3xxx commercial, 7xxx
-  // vacant land. 13xx is multifamily.
-  PROPERTY_USE_CODE?: string;
-  PROPERTY_USE_DESC?: string;
-  TOTAL_UNITS?: number;
-  ASSESSED_VALUE?: number;
-  FULL_CASH_VALUE?: number;        // Market value per the roll
-  // Last sale columns — LOCKED_SALE_PRICE is the one used for tax
-  // purposes, SALE_PRICE can be blank for non-arms-length transfers.
-  LOCKED_SALE_PRICE?: number;
-  SALE_PRICE?: number;
-  SALE_DATE?: number;              // epoch ms
+  APN?: string;                    // e.g. "10220004H" (Book-Map-Item[-Split])
+  OwnerName?: string;
+  OwnerAddressLine1?: string;
+  OwnerCity?: string;
+  OwnerState?: string;
+  OwnerZipCode?: string;
+  PropertyFullStreetAddress?: string; // Pre-joined situs address string
+  PropertyCity?: string;
+  PropertyZipCode?: string;
+  ConstructionYear?: number;
+  // Livable area is populated for single-family/small residential parcels
+  // and is frequently null for large multifamily/commercial parcels (the
+  // roll tracks those by improvement value instead) — confirmed on the
+  // live 100+ unit apartment record used to verify this schema.
+  LivableArea_SqFt?: number;
+  LotSize_SqFt?: number;
+  LotSize_Acre?: number;           // Fallback when LotSize_SqFt is null
+  PropertyUseCode?: string;
+  PropertyUseDescription?: string;
+  // FullCashValue = uncapped market value per the roll; AssessedFullCashValue
+  // is FullCashValue run through the class assessment ratio. We prefer the
+  // market figure, same "prefer market over capped" pattern as Tampa's
+  // JV/AV choice.
+  FullCashValue?: number;
+  AssessedFullCashValue?: number;
+  SalePrice?: number;
+  SaleDate?: number;               // epoch ms
 }
 
 interface FeatureServerResponse {
@@ -84,11 +88,10 @@ export async function fetchPhoenixAssessor(
     }
 
     const url = new URL(PHOENIX_PARCELS);
-    // Maricopa's layer carries SITUS_ADDRESS as a composed string. Prefix
-    // LIKE so "101 N CENTRAL AVE #1500" still matches "101 N CENTRAL AVE%".
-    // If a future layer version drops SITUS_ADDRESS we'll need to OR on
-    // SITUS_HSNO + SITUS_STREET — easy swap, not needed today.
-    const where = `SITUS_ADDRESS LIKE '${addr.replace(/'/g, "''")}%'`;
+    // PropertyFullStreetAddress is the layer's composed situs address
+    // string (e.g. "8130 W INDIAN SCHOOL RD"). Prefix LIKE so a suite/unit
+    // suffix on the input address still matches the base parcel row.
+    const where = `PropertyFullStreetAddress LIKE '${addr.replace(/'/g, "''")}%'`;
     url.searchParams.set('where', where);
     url.searchParams.set('outFields', '*');
     url.searchParams.set('f', 'json');
@@ -114,32 +117,30 @@ export async function fetchPhoenixAssessor(
 }
 
 function toRecord(a: MaricopaParcelAttrs): AssessorRecord {
-  // Square footage: prefer the commercial gross area, fall back to
-  // residential living area. Same coalesce pattern as Denver.
-  const sqft = num(a.TOTAL_BLDG_SQFT) ?? num(a.LIVING_AREA);
-
-  // Land area: layer sometimes publishes acres (LAND_AREA) and sometimes
-  // square feet (LAND_AREA_SF). Convert acres → sqft if that's what we got.
-  let lotSqft = num(a.LAND_AREA_SF);
+  // Land area: layer publishes both LotSize_SqFt and LotSize_Acre; prefer
+  // the pre-computed sqft figure and only convert from acres if it's null.
+  let lotSqft = num(a.LotSize_SqFt);
   if (lotSqft == null) {
-    const acres = num(a.LAND_AREA);
+    const acres = num(a.LotSize_Acre);
     if (acres != null) lotSqft = Math.round(acres * 43560);
   }
 
-  // Sale price: LOCKED_SALE_PRICE is the tax-roll figure and is usually
-  // non-zero for real transfers. Fall back to SALE_PRICE. Filter 0s.
-  const salePrice = num(a.LOCKED_SALE_PRICE) ?? num(a.SALE_PRICE);
-  const saleDate = a.SALE_DATE ? new Date(a.SALE_DATE).toISOString().slice(0, 10) : undefined;
+  // SalePrice = null/0 means no recorded arms-length transfer on this
+  // parcel — filter those out same as Denver's $0 sentinel handling.
+  const salePrice = num(a.SalePrice);
+  const saleDate = a.SaleDate ? new Date(a.SaleDate).toISOString().slice(0, 10) : undefined;
 
   return {
     parcelId: str(a.APN),
-    owner: str(a.OWNER_NAME),
-    assessedValue: num(a.FULL_CASH_VALUE) ?? num(a.ASSESSED_VALUE),
-    yearBuilt: num(a.YEAR_BUILT),
-    units: num(a.TOTAL_UNITS),
-    sqft,
+    owner: str(a.OwnerName),
+    assessedValue: num(a.FullCashValue) ?? num(a.AssessedFullCashValue),
+    yearBuilt: num(a.ConstructionYear),
+    // No reliable per-parcel unit count on this layer — PropertyUseDescription
+    // only carries bucketed ranges ("APARTMENTS 25 - 99 UNITS"), not a count.
+    units: undefined,
+    sqft: num(a.LivableArea_SqFt),
     lotSqft,
-    propertyClass: str(a.PROPERTY_USE_DESC) ?? str(a.PROPERTY_USE_CODE),
+    propertyClass: str(a.PropertyUseDescription) ?? str(a.PropertyUseCode),
     lastSalePrice: salePrice && salePrice > 0 ? salePrice : undefined,
     lastSaleDate: saleDate,
     source: 'maricopa',
