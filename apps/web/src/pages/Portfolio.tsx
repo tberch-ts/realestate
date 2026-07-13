@@ -1,21 +1,32 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import type { OwnerCluster } from '@mfa/shared';
+import type { MarketKey, OwnerCluster } from '@mfa/shared';
 import { fetchOwners } from '../lib/api';
+import { useMarkets, getStoredMarket, setStoredMarket } from '../lib/markets';
+import MarketSelect from '../components/MarketSelect';
 
 export default function Portfolio() {
   const [params] = useSearchParams();
+  const { markets } = useMarkets();
+  const [market, setMarket] = useState<MarketKey>((params.get('market') as MarketKey) || getStoredMarket());
+  const cfg = markets.find((m) => m.key === market);
   const [outOfState, setOutOfState] = useState(params.get('oos') === '1');
   const [search, setSearch] = useState('');
   const [owners, setOwners] = useState<OwnerCluster[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  function onMarketChange(next: MarketKey) {
+    setMarket(next);
+    setStoredMarket(next);
+    setOwners(null);
+  }
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchOwners({ outOfState, search: search || undefined, limit: 100 })
+    fetchOwners(market, { outOfState, search: search || undefined, limit: 100 })
       .then((c) => {
         if (!cancelled) setOwners(c);
       })
@@ -24,7 +35,7 @@ export default function Portfolio() {
     return () => {
       cancelled = true;
     };
-  }, [outOfState, search]);
+  }, [market, outOfState, search]);
 
   const totalUnits = owners?.reduce((s, c) => s + c.totalUnits, 0) ?? 0;
   const totalProps = owners?.reduce((s, c) => s + c.propertyCount, 0) ?? 0;
@@ -35,10 +46,13 @@ export default function Portfolio() {
         <Link to="/" className="text-sm text-indigo-400 hover:text-indigo-300">
           ← Home
         </Link>
-        <h1 className="text-2xl font-bold mt-2">Denver ownership clusters</h1>
+        <div className="flex items-start justify-between flex-wrap gap-3 mt-2">
+          <h1 className="text-2xl font-bold">{cfg?.label ?? 'Market'} ownership clusters</h1>
+          <MarketSelect value={market} onChange={onMarketChange} capability="portfolioSupported" />
+        </div>
         <p className="text-slate-400 text-sm">
-          All Denver 100+ unit multifamily built 1990+, grouped by owner. Click a name to see the
-          full portfolio and pull Colorado SOS data.
+          All {cfg?.label ?? 'this market'} 100+ unit multifamily built 1990+, grouped by owner.
+          Click a name to see the full portfolio{market === 'denver' ? ' and pull Colorado SOS data' : ''}.
         </p>
 
         <div className="flex flex-wrap gap-3 mt-5 mb-4 items-end">
@@ -92,7 +106,7 @@ export default function Portfolio() {
               </thead>
               <tbody>
                 {owners.map((o) => (
-                  <OwnerRow key={o.owner} o={o} />
+                  <OwnerRow key={o.owner} o={o} market={market} />
                 ))}
               </tbody>
             </table>
@@ -103,12 +117,12 @@ export default function Portfolio() {
   );
 }
 
-function OwnerRow({ o }: { o: OwnerCluster }) {
+function OwnerRow({ o, market }: { o: OwnerCluster; market: MarketKey }) {
   return (
     <tr className="border-b border-slate-800/50 hover:bg-slate-800/30">
       <td className="py-2 px-3 align-top">
         <Link
-          to={`/owner?name=${encodeURIComponent(o.owner)}`}
+          to={`/owner?name=${encodeURIComponent(o.owner)}&market=${market}`}
           className="text-slate-100 hover:text-indigo-300"
         >
           {o.owner}
@@ -133,7 +147,7 @@ function OwnerRow({ o }: { o: OwnerCluster }) {
       </td>
       <td className="py-2 px-3 text-right align-top">
         <Link
-          to={`/owner?name=${encodeURIComponent(o.owner)}`}
+          to={`/owner?name=${encodeURIComponent(o.owner)}&market=${market}`}
           className="text-indigo-400 hover:text-indigo-300 text-xs"
         >
           View →

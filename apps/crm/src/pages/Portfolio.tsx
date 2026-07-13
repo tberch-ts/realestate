@@ -1,21 +1,32 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import type { OwnerCluster } from '@mfa/shared';
+import type { MarketKey, OwnerCluster } from '@mfa/shared';
 import { fetchOwners } from '../lib/api';
+import { useMarkets, getStoredMarket, setStoredMarket } from '../lib/markets';
+import MarketSelect from '../components/MarketSelect';
 
 export default function Portfolio() {
   const [params] = useSearchParams();
+  const { markets } = useMarkets();
+  const [market, setMarket] = useState<MarketKey>((params.get('market') as MarketKey) || getStoredMarket());
+  const cfg = markets.find((m) => m.key === market);
   const [outOfState, setOutOfState] = useState(params.get('oos') === '1');
   const [search, setSearch] = useState('');
   const [owners, setOwners] = useState<OwnerCluster[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  function onMarketChange(next: MarketKey) {
+    setMarket(next);
+    setStoredMarket(next);
+    setOwners(null);
+  }
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchOwners({ outOfState, search: search || undefined, limit: 100 })
+    fetchOwners(market, { outOfState, search: search || undefined, limit: 100 })
       .then((c) => {
         if (!cancelled) setOwners(c);
       })
@@ -24,17 +35,20 @@ export default function Portfolio() {
     return () => {
       cancelled = true;
     };
-  }, [outOfState, search]);
+  }, [market, outOfState, search]);
 
   const totalUnits = owners?.reduce((s, c) => s + c.totalUnits, 0) ?? 0;
   const totalProps = owners?.reduce((s, c) => s + c.propertyCount, 0) ?? 0;
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-1">Denver ownership clusters</h1>
+      <div className="flex items-start justify-between flex-wrap gap-3 mb-1">
+        <h1 className="text-2xl font-bold">{cfg?.label ?? 'Market'} ownership clusters</h1>
+        <MarketSelect value={market} onChange={onMarketChange} capability="portfolioSupported" />
+      </div>
       <p className="text-sm text-gray-500 mb-6">
-        All Denver 100+ unit multifamily built 1990+, grouped by owner. Click a name to see the
-        full portfolio and pull Colorado SOS data.
+        All {cfg?.label ?? 'this market'} 100+ unit multifamily built 1990+, grouped by owner.
+        Click a name to see the full portfolio{market === 'denver' ? ' and pull Colorado SOS data' : ''}.
       </p>
 
       <div className="flex flex-wrap gap-3 mb-4 items-end">
@@ -85,7 +99,7 @@ export default function Portfolio() {
             </thead>
             <tbody>
               {owners.map((o) => (
-                <OwnerRow key={o.owner} o={o} />
+                <OwnerRow key={o.owner} o={o} market={market} />
               ))}
             </tbody>
           </table>
@@ -95,11 +109,11 @@ export default function Portfolio() {
   );
 }
 
-function OwnerRow({ o }: { o: OwnerCluster }) {
+function OwnerRow({ o, market }: { o: OwnerCluster; market: MarketKey }) {
   return (
     <tr className="border-t hover:bg-white/5 transition-colors" style={{ borderColor: 'var(--border)' }}>
       <td className="py-2 px-3 align-top">
-        <Link to={`/app/owner?name=${encodeURIComponent(o.owner)}`} className="text-gray-100 hover:text-blue-300">
+        <Link to={`/app/owner?name=${encodeURIComponent(o.owner)}&market=${market}`} className="text-gray-100 hover:text-blue-300">
           {o.owner}
         </Link>
       </td>
@@ -113,7 +127,7 @@ function OwnerRow({ o }: { o: OwnerCluster }) {
         {o.outOfState ? <span className="text-amber-300">OOS: {o.mailingState}</span> : <span className="text-gray-400">{o.mailingState ?? '—'}</span>}
       </td>
       <td className="py-2 px-3 text-right align-top">
-        <Link to={`/app/owner?name=${encodeURIComponent(o.owner)}`} className="text-blue-400 hover:text-blue-300 text-xs">
+        <Link to={`/app/owner?name=${encodeURIComponent(o.owner)}&market=${market}`} className="text-blue-400 hover:text-blue-300 text-xs">
           View →
         </Link>
       </td>

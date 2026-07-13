@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import type { FollowupScored, OwnerCluster, SosEntity } from '@mfa/shared';
+import type { FollowupScored, MarketKey, OwnerCluster, SosEntity } from '@mfa/shared';
 import { fetchOwner, fetchSosEntity } from '../lib/api';
+import { useMarkets, DEFAULT_MARKET } from '../lib/markets';
 
 export default function Owner() {
   const [params] = useSearchParams();
   const name = params.get('name') ?? '';
+  const market = (params.get('market') as MarketKey) || DEFAULT_MARKET;
+  const { markets } = useMarkets();
+  const cfg = markets.find((m) => m.key === market);
   const [cluster, setCluster] = useState<OwnerCluster | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -19,20 +23,24 @@ export default function Owner() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchOwner(name)
+    fetchOwner(market, name)
       .then((c) => !cancelled && setCluster(c))
       .catch((e: Error) => !cancelled && setError(e.message))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
-  }, [name]);
+  }, [market, name]);
+
+  // Colorado SOS lookup is the only state-entity scraper wired up on this
+  // page today — see apps/api/src/providers/sosDispatcher.ts.
+  const sosAvailable = cfg?.sosSupported ?? false;
 
   async function onUnmask() {
     setSosStatus('loading');
     setSosError(null);
     try {
-      const e = await fetchSosEntity(name);
+      const e = await fetchSosEntity(name, cfg?.stateCode ?? 'CO');
       setSos(e);
       setSosStatus('done');
     } catch (err) {
@@ -43,7 +51,7 @@ export default function Owner() {
 
   const principalState = sos?.principalAddress ? extractState(sos.principalAddress) : undefined;
   const trueOutOfState =
-    principalState && principalState !== 'CO'
+    principalState && principalState !== cfg?.stateCode
       ? principalState
       : cluster?.outOfState
       ? cluster.mailingState
@@ -52,7 +60,7 @@ export default function Owner() {
   return (
     <div className="min-h-screen px-6 py-6">
       <div className="max-w-6xl mx-auto">
-        <Link to="/portfolio" className="text-sm text-indigo-400 hover:text-indigo-300">
+        <Link to={`/portfolio?market=${market}`} className="text-sm text-indigo-400 hover:text-indigo-300">
           ← All owners
         </Link>
         <h1 className="text-2xl font-bold mt-2 break-words">{name}</h1>
@@ -77,13 +85,20 @@ export default function Owner() {
               />
             </div>
 
-            <SosPanel
-              name={name}
-              status={sosStatus}
-              entity={sos}
-              error={sosError}
-              onUnmask={onUnmask}
-            />
+            {sosAvailable ? (
+              <SosPanel
+                name={name}
+                stateCode={cfg?.stateCode ?? 'CO'}
+                status={sosStatus}
+                entity={sos}
+                error={sosError}
+                onUnmask={onUnmask}
+              />
+            ) : (
+              <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/40 text-sm text-slate-400">
+                LLC unmasking isn't wired up for {cfg?.label ?? 'this market'} yet.
+              </div>
+            )}
 
             <h2 className="text-lg font-semibold text-slate-200 mt-8 mb-3">
               Properties in this portfolio ({cluster.properties.length})
@@ -105,7 +120,7 @@ export default function Owner() {
                   {cluster.properties
                     .sort((a, b) => (b.units ?? 0) - (a.units ?? 0))
                     .map((p) => (
-                      <Row key={p.parcelId ?? p.address} p={p} />
+                      <Row key={p.parcelId ?? p.address} p={p} locationLabel={cfg?.label ?? ''} />
                     ))}
                 </tbody>
               </table>
@@ -119,12 +134,14 @@ export default function Owner() {
 
 function SosPanel({
   name,
+  stateCode,
   status,
   entity,
   error,
   onUnmask,
 }: {
   name: string;
+  stateCode: string;
   status: 'idle' | 'loading' | 'done' | 'error';
   entity: SosEntity | null;
   error: string | null;
@@ -133,7 +150,7 @@ function SosPanel({
   return (
     <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-5">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-slate-100">Colorado SOS lookup</h3>
+        <h3 className="text-sm font-semibold text-slate-100">{stateCode} SOS lookup</h3>
         {status !== 'done' && (
           <button
             onClick={onUnmask}
@@ -146,8 +163,8 @@ function SosPanel({
       </div>
       {status === 'idle' && (
         <p className="text-xs text-slate-500">
-          Pulls registered-agent address, formation date, and principal office from Colorado
-          Secretary of State for "{name}". Free public data.
+          Pulls registered-agent address, formation date, and principal office from the {stateCode}
+          {' '}Secretary of State for "{name}". Free public data.
         </p>
       )}
       {status === 'error' && (
@@ -155,7 +172,7 @@ function SosPanel({
       )}
       {status === 'done' && !entity && (
         <p className="text-sm text-slate-400">
-          No Colorado SOS entity matched this exact name. The LLC may be registered in another
+          No {stateCode} SOS entity matched this exact name. The LLC may be registered in another
           state and only filed as a foreign entity here under a slightly different name.
         </p>
       )}
@@ -176,7 +193,7 @@ function SosPanel({
                 rel="noreferrer"
                 className="text-xs text-indigo-400 hover:text-indigo-300"
               >
-                View on sos.state.co.us ↗
+                View on {stateCode} Secretary of State site ↗
               </a>
             </div>
           )}
@@ -208,12 +225,13 @@ function SosRow({
   );
 }
 
-function Row({ p }: { p: FollowupScored }) {
+function Row({ p, locationLabel }: { p: FollowupScored; locationLabel: string }) {
+  const fullAddress = locationLabel ? `${p.address}, ${locationLabel}` : p.address;
   return (
     <tr className="border-b border-slate-800/50 hover:bg-slate-800/30">
       <td className="py-2 px-3 align-top">
         <Link
-          to={`/property?address=${encodeURIComponent(p.address + ', Denver, CO')}`}
+          to={`/property?address=${encodeURIComponent(fullAddress)}`}
           className="text-slate-100 hover:text-indigo-300"
         >
           {p.address}
@@ -238,7 +256,7 @@ function Row({ p }: { p: FollowupScored }) {
       </td>
       <td className="py-2 px-3 text-right align-top whitespace-nowrap">
         <Link
-          to={`/loi?address=${encodeURIComponent(p.address + ', Denver, CO')}${p.units ? `&units=${p.units}` : ''}`}
+          to={`/loi?address=${encodeURIComponent(fullAddress)}${p.units ? `&units=${p.units}` : ''}`}
           className="text-emerald-400 hover:text-emerald-300 text-xs"
         >
           Start LOI →

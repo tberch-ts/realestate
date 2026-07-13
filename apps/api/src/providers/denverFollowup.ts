@@ -1,5 +1,5 @@
 import type { FollowupProperty, FollowupResult, FollowupScored, OwnerType, ProviderResult } from '@mfa/shared';
-import { fetchDenverHotspots } from './denverNeighborhoods.js';
+import { fetchHotspots } from './neighborhoods.js';
 
 // Denver Open Data: Middle Housing Stock (ArcGIS FeatureServer).
 // Contains parcels with unit counts, owner, year built, last sale.
@@ -29,7 +29,7 @@ export async function fetchDenverFollowup(opts: {
   }
 
   // 1. Find the zone polygon from the cached neighborhoods GeoJSON.
-  const hs = await fetchDenverHotspots();
+  const hs = await fetchHotspots('denver');
   if (hs.status !== 'ok' || !hs.data) {
     return { provider, status: 'error', message: 'Hotspots cache unavailable' };
   }

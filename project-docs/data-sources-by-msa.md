@@ -26,17 +26,114 @@
 | MSA | State | County | Assessor | SoS | Neighborhoods | Follow-up | Portfolio |
 |---|---|---|---|---|---|---|---|
 | Denver | CO | Denver | ok | ok | ok | ok | ok |
-| Phoenix | AZ | Maricopa | ok | not_available | deferred | deferred | deferred |
+| Phoenix | AZ | Maricopa | ok | not_available | ok | deferred | deferred |
 | Austin | TX | Travis | ok | needs_credentials | deferred | deferred | deferred |
-| Nashville | TN | Davidson | ok | not_available | deferred | deferred | deferred |
-| Charlotte | NC | Mecklenburg | ok | not_available | deferred | deferred | deferred |
-| Tampa | FL | Hillsborough | ok | ok | deferred | deferred | deferred |
+| Nashville | TN | Davidson | ok | not_available | ok | deferred | deferred |
+| Charlotte | NC | Mecklenburg | ok | not_available | ok | deferred | deferred |
+| Tampa | FL | Hillsborough | ok | ok | ok | deferred | deferred |
 | Raleigh | NC | Wake | ok | not_available | deferred | deferred | deferred |
 
 `deferred` = the per-MSA provider isn't implemented yet but the data
 source has been scoped (see each MSA section). Frontend gates those
 tabs off the `*Supported` flags in
 [`apps/api/src/config/markets.ts`](../apps/api/src/config/markets.ts).
+
+**Neighborhoods update:** Phoenix, Nashville, Charlotte, Tampa, and
+Raleigh are all real and live — see "Neighborhoods — verification notes"
+below for the boundary sources used and how they were verified. Only
+Austin's hotspot map remains unwired.
+
+**Assessor drift — resolved 7/2026.** An earlier pass through this doc
+flagged Phoenix/Nashville/Charlotte/Tampa/Raleigh's assessor
+FeatureServers as drifted (`⚠`) after finding them 400/404/500/token-gated
+on re-check. All five (plus Denver, which had a related bug) have since
+been re-verified live and repointed to working endpoints with real
+field-by-field schema mapping — see each MSA's section above and the
+provider files themselves for specifics. None of the `⚠` caveats below
+still apply; kept only as a record of what broke and why, in case an
+endpoint drifts again:
+
+- **Denver** (`denverAssessor.ts`): the URL used `/ArcGIS/` instead of
+  `/arcgis/` in the path — ArcGIS Online's gateway treats the capitalized
+  path as a different, token-gated route and returned a misleading
+  `"Token Required"` error instead of a 404, even though the service is
+  genuinely public. One-character fix.
+- **Phoenix** (`phoenixAssessor.ts`): the old `services6.arcgis.com/
+  btCzjPTmhHGPvKkG/.../Parcels/FeatureServer/0` org id no longer resolved
+  at all (`"Invalid URL"`). Repointed to Maricopa County GIS's real
+  `Parcel_Data_View` FeatureServer (found via the ArcGIS Online Sharing
+  REST API), field-mapped, and verified against a real 100+-unit
+  apartment sale. No unit-count field exists in this layer, so
+  `units` is left `undefined` rather than guessed.
+- **Nashville** (`nashvilleAssessor.ts`): `Cadastral/Parcels_SP/MapServer`
+  had moved; the real service is `Cadastral/Parcels/MapServer` (no `_SP`
+  suffix). Repointed and field-mapped; this layer has no building
+  characteristics at all (no year built/units/sqft), only
+  parcel/ownership/valuation.
+- **Charlotte** (`charlotteAssessor.ts`): `Parcels_Landmarks/MapServer/1`
+  was gone; the real service is `TaxParcel_camadata` (a CAMA-joined
+  layer with owner, sale, valuation, and building detail in one row).
+  Repointed and verified against a real 61-unit complex.
+- **Tampa** (`tampaAssessor.ts`): `maps.hcpafl.org` had been replaced
+  entirely by an unrelated React SPA ("HCPA GIS Web Map") — the whole
+  `/arcgis/rest/services/...` path was gone. Repointed to City of
+  Tampa's own GIS (`arcgis.tampagov.net`), which republishes the same
+  county tax-roll data. The FL DR-501 statewide field-name assumption
+  did **not** hold for this layer — don't copy those field names to
+  future FL counties without re-verifying.
+- **Raleigh** (`raleighAssessor.ts`): `Parcels/MapServer/0` didn't exist;
+  the real service is `Property/Property`. Repointed and verified
+  against a real 578-unit downtown parcel.
+
+---
+
+## Neighborhoods — verification notes (this round)
+
+Real, live boundary sources for the Hotspots choropleth, found and
+curl-verified (`?f=json` for schema, `/query?...&f=geojson` for a sample)
+while building this out. Config lives in
+[`apps/api/src/providers/neighborhoodSources.ts`](../apps/api/src/providers/neighborhoodSources.ts);
+scoring engine is [`neighborhoods.ts`](../apps/api/src/providers/neighborhoods.ts)
+(generalized from the old Denver-only `denverNeighborhoods.ts`).
+
+| Market | Layer | Count | Name field | Endpoint |
+|---|---|---|---|---|
+| Phoenix | Urban Villages | 15 | `NAME` | `maps.phoenix.gov/pub/rest/services/Public/Villages/MapServer/0` |
+| Nashville | Community Planning Areas | 14 | `CommunityName` | `maps.nashville.gov/arcgis/rest/services/Boundaries/Boundaries/MapServer/1` |
+| Charlotte | Community Planning Areas | 15 | `Name` | `services.arcgis.com/9Nl857LBlQVyzq54/.../CommunityPlanningArea/FeatureServer/0` |
+| Tampa | Neighborhood associations (active only) | 107 | `AssocLabel` | `arcgis.tampagov.net/arcgis/rest/services/OpenData/Boundary/MapServer/5` (`where=NEIGHSTATUS='Active'`) |
+| Raleigh | Citizens Advisory Council (CAC) | 18 | `CAC` | `maps.raleighnc.gov/arcgis/rest/services/Boundaries/MapServer/1` |
+
+Rejected/considered-and-passed-on:
+
+- **Charlotte "Neighborhood Profile Area" (NPA)** layers
+  (`services.arcgis.com/.../NPA/FeatureServer` and
+  `gis.charlottenc.gov/.../HNS/NPA_HLT`) — real and live, but ~458
+  polygons county-wide. The Census tract-resolution step in
+  `neighborhoods.ts` deliberately runs one-neighborhood-at-a-time
+  (api.census.gov 503s on concurrent hits), so 458 sequential Census
+  round-trips would take several minutes per cache warm. Community
+  Planning Areas gives the same city-wide coverage at Denver-comparable
+  granularity (15 areas) with real names instead of bare NPA numbers.
+- **Austin "COA Neighborhood Planning Areas"** — not investigated this
+  round since Austin's assessor is still `not_available` (no TCAD API);
+  lighting up neighborhoods for a market with no working assessor is
+  lower priority than Raleigh, which already has a working assessor.
+
+Every score still comes from the same national Census ACS pull used by
+Denver (median household income, population, median gross rent, rent
+burden — B19013_001E/B01003_001E/B25064_001E/B25070_010E). Nothing about
+the scoring math is per-market; only the polygon source is.
+
+**Caveat inherited from Denver's own setup:** `CENSUS_API_KEY` must be
+set for the ACS calls to return data — Census now hard-requires a key
+("A valid key must be included with each data API request") rather than
+just rate-limiting anonymous requests. Without it, every market's
+Hotspots map still renders (boundaries + fallback mid-range scores) but
+every neighborhood shows `medianIncome`/`medianRent`/etc. as blank. This
+is not new to this change — it already applied to Denver — but is worth
+calling out since it's easy to mistake for a bug in the new markets
+specifically when smoke-testing without the key configured.
 
 ---
 
@@ -471,27 +568,37 @@ preference order).
 
 ---
 
-## Neighborhoods / Follow-up / Portfolio — deferred across all new MSAs
+## Neighborhoods / Follow-up / Portfolio — status across new MSAs
 
-Deferred deliberately — each MSA needs:
+**Neighborhoods is done for Phoenix, Nashville, Charlotte, and Tampa** —
+see "Neighborhoods — verification notes" above. It turned out to need far
+less per-market code than the original ~300 LOC/market estimate below,
+because the Census/scoring half is now a single shared engine
+(`neighborhoods.ts`) and the per-market half is just a ~10-line config
+entry (`neighborhoodSources.ts`) once you've found the boundary layer.
 
-- **Neighborhoods:** city/county polygon layer + ACS tract join. ~300
-  LOC per market, most of it wiring the polygon layer's geometry into
-  our submarket-scoring engine.
+Follow-up and Portfolio remain deferred for every non-Denver market:
+
 - **Follow-up:** assessor group-by-owner query pulling parcels held
   10+ years with out-of-state mailing addresses. The query shape is
   portable — the per-MSA work is field-name mapping and mailing
-  address extraction.
+  address extraction. Blocked on the assessor FeatureServer drift noted
+  above (Phoenix/Nashville/Charlotte/Tampa all need their endpoint
+  re-verified or re-pointed first — and Phoenix's current schema has no
+  unit-count field at all).
 - **Portfolio:** reverse index over the assessor — owner → parcels.
   Same group-by pattern; the per-MSA piece is UI-surface owner-name
-  normalization (Maricopa uses `OwnerName`, Mecklenburg uses `OWNER`,
-  Wake uses `OWNER`, Hillsborough uses a derived owner string from
-  the DR-501 `OWN_NAME` field).
+  normalization (Maricopa uses `OwnerName`, Mecklenburg uses `ownrlstnme`,
+  Wake uses `OWNER`, Hillsborough uses `OWNER`, Davidson uses `Owner`,
+  Austin uses `py_owner_name`).
 
-Priority order once assessor/SoS coverage matures: **Phoenix →
-Tampa → Nashville → Charlotte → Raleigh → Austin**, matching buy-box
-pipeline value. Austin's assessor is now live (see its section above);
-neighborhoods/follow-up/portfolio are still deferred.
+Priority order once portfolio/follow-up land: **Phoenix → Tampa →
+Nashville → Charlotte → Raleigh → Austin**, matching buy-box pipeline
+value. Every market's assessor is now live (see per-MSA sections
+above) and Raleigh's neighborhoods boundary source has also been
+found and verified — see "Neighborhood polygon layers" below.
+Follow-up/portfolio remain the only deferred pieces across all 6
+non-Denver markets.
 
 ---
 
@@ -530,14 +637,19 @@ neighborhoods/follow-up/portfolio are still deferred.
   confirmed-working one with real query results checked field-by-field.
 - **Sales-price lag.** Every county assessor lags current transactions
   by 30-90 days. For live deals layer RentCast/ATTOM on top.
-- **Neighborhood polygon layers.** Candidates exist for every new
-  MSA but aren't wired. Inventory:
-  - Phoenix: `City of Phoenix Neighborhood Planning Areas`
-  - Austin: `COA Neighborhood Planning Areas`
-  - Nashville: Metro Nashville `Urban Zoning Overlay Districts`
-  - Charlotte: Mecklenburg `Neighborhood Statistical Areas`
-  - Tampa: Hillsborough `Community Planning Areas`
-  - Raleigh: Raleigh `Citizens Advisory Council Areas`
+- **Neighborhood polygon layers — resolved for 4 of 6, Raleigh added.**
+  Phoenix, Nashville, Charlotte, and Tampa were wired first (see
+  "Neighborhoods — verification notes" above; note the actual layers
+  used differ from the original candidate list below, which was written
+  before anyone had actually curl'd the endpoints). Raleigh's Citizens
+  Advisory Council (CAC) layer — found and verified live
+  (`maps.raleighnc.gov/arcgis/rest/services/Boundaries/MapServer/1`, 18
+  areas, field `CAC`) — is now wired up too, so 5 of 6 non-Denver
+  markets have a live hotspot map. Still open:
+  - Austin: `COA Neighborhood Planning Areas` — not investigated. Was
+    lower priority while the assessor was unresolved; the assessor is
+    now live (see Austin section above), so this is unblocked whenever
+    someone picks it up.
 - **Austin assessor — resolved 7/2026.** Travis County TNR's public
   parcel feed (`taxmaps.traviscountytx.gov`) covers owner/market
   value/year-built/lot-size/property-class. It has no unit count, sqft,

@@ -35,10 +35,16 @@ export const MARKETS: ReadonlyArray<MarketConfig> = [
     // AZ business entities live at the Arizona Corporation Commission, not
     // the SoS — wrapped in a separate provider (arizonaSos.ts). Stub today.
     sosSupported: false,
-    neighborhoodsSupported: false,
+    // Hotspots choropleth is live: 15 Urban Villages (City of Phoenix Open
+    // Data ArcGIS) + national Census ACS scoring. Follow-up/portfolio stay
+    // off — the Maricopa bulk parcel layer we'd need for owner rollups has
+    // no unit-count field and its previously-documented FeatureServer URL
+    // no longer resolves (verified while building this out). See
+    // project-docs/data-sources-by-msa.md.
+    neighborhoodsSupported: true,
     followupSupported: false,
     portfolioSupported: false,
-    notes: 'Maricopa Assessor live; neighborhoods/followup/portfolio pending.',
+    notes: 'Hotspots live (Phoenix Urban Villages). Follow-up/portfolio pending a working bulk parcel source.',
   },
   {
     key: 'austin',
@@ -69,9 +75,16 @@ export const MARKETS: ReadonlyArray<MarketConfig> = [
     center: [-86.7816, 36.1627],
     assessorSupported: true,
     sosSupported: false,
-    neighborhoodsSupported: false,
+    // Hotspots choropleth is live: 14 Community Planning Areas (Metro
+    // Nashville GIS) + national Census ACS scoring. Follow-up/portfolio
+    // stay off — nashvilleAssessor.ts's parcel FeatureServer
+    // (Cadastral/Parcels_SP) 404s as of this writing (verified while
+    // building this out); needs re-pointing before bulk owner-rollup
+    // queries can work. See project-docs/data-sources-by-msa.md.
+    neighborhoodsSupported: true,
     followupSupported: false,
     portfolioSupported: false,
+    notes: 'Hotspots live (Nashville Community Planning Areas). Follow-up/portfolio pending a working bulk parcel source.',
   },
   {
     key: 'charlotte',
@@ -82,9 +95,15 @@ export const MARKETS: ReadonlyArray<MarketConfig> = [
     center: [-80.8431, 35.2271],
     assessorSupported: true,
     sosSupported: false,
-    neighborhoodsSupported: false,
+    // Hotspots choropleth is live: 15 Community Planning Areas (City of
+    // Charlotte GIS) + national Census ACS scoring. Follow-up/portfolio
+    // stay off — charlotteAssessor.ts's parcel FeatureServer
+    // (meckgis.mecklenburgcountync.gov) 404s as of this writing (verified
+    // while building this out). See project-docs/data-sources-by-msa.md.
+    neighborhoodsSupported: true,
     followupSupported: false,
     portfolioSupported: false,
+    notes: 'Hotspots live (Charlotte Community Planning Areas). Follow-up/portfolio pending a working bulk parcel source.',
   },
   {
     key: 'tampa',
@@ -97,9 +116,16 @@ export const MARKETS: ReadonlyArray<MarketConfig> = [
     // Florida Sunbiz is the one non-Colorado SoS we have a reliable free
     // scraper for. See floridaSos.ts.
     sosSupported: true,
-    neighborhoodsSupported: false,
+    // Hotspots choropleth is live: 107 active neighborhood associations
+    // (City of Tampa Open Data) + national Census ACS scoring. Follow-up/
+    // portfolio stay off — tampaAssessor.ts's parcel host
+    // (maps.hcpafl.org) has been replaced by an unrelated single-page app
+    // with no REST API surface left (verified while building this out).
+    // See project-docs/data-sources-by-msa.md.
+    neighborhoodsSupported: true,
     followupSupported: false,
     portfolioSupported: false,
+    notes: 'Hotspots live (Tampa neighborhood associations). Follow-up/portfolio pending a working bulk parcel source.',
   },
   {
     key: 'raleigh',
@@ -110,9 +136,14 @@ export const MARKETS: ReadonlyArray<MarketConfig> = [
     center: [-78.6382, 35.7796],
     assessorSupported: true,
     sosSupported: false,
-    neighborhoodsSupported: false,
+    // Hotspots choropleth is live: 18 Citizens Advisory Council (CAC)
+    // areas (City of Raleigh GIS, maps.raleighnc.gov) + national Census
+    // ACS scoring. Follow-up/portfolio stay off pending owner-rollup
+    // work. See project-docs/data-sources-by-msa.md.
+    neighborhoodsSupported: true,
     followupSupported: false,
     portfolioSupported: false,
+    notes: 'Hotspots live (Raleigh Citizens Advisory Council areas). Follow-up/portfolio pending owner-rollup work.',
   },
 ];
 
@@ -162,4 +193,11 @@ export function resolveMarket(args: {
 // to populate the market picker without showing gated markets.
 export function supportedAssessorMarkets(): MarketConfig[] {
   return MARKETS.filter((m) => m.assessorSupported);
+}
+
+// Same idea for the Hotspots choropleth — used by the frontend market
+// selector to gray out/disable markets without a real neighborhood
+// boundary source yet.
+export function supportedNeighborhoodMarkets(): MarketConfig[] {
+  return MARKETS.filter((m) => m.neighborhoodsSupported);
 }

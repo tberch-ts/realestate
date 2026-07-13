@@ -6,6 +6,8 @@ import type {
   LoiDraftCreate,
   LoiDraftPatch,
   LoiInput,
+  MarketConfig,
+  MarketKey,
   OwnerCluster,
   PropertySnapshot,
   SosEntity,
@@ -71,35 +73,62 @@ export async function deleteDraft(id: number): Promise<void> {
   if (!res.ok) throw new Error(`delete draft: ${res.status}`);
 }
 
+// ---- Markets ----
+
+let cachedMarkets: MarketConfig[] | null = null;
+let marketsInflight: Promise<MarketConfig[]> | null = null;
+
+// Fetches the market registry (per-feature *Supported flags) so pages can
+// gate their market picker off real capability. Cached module-wide — the
+// list barely changes and is already HTTP-cached server-side.
+export async function fetchMarkets(): Promise<MarketConfig[]> {
+  if (cachedMarkets) return cachedMarkets;
+  if (marketsInflight) return marketsInflight;
+  marketsInflight = (async () => {
+    const res = await apiFetch(`${BASE}/api/markets`);
+    if (!res.ok) throw new Error(`API ${res.status}`);
+    const body = await res.json();
+    cachedMarkets = body.data.markets as MarketConfig[];
+    return cachedMarkets;
+  })();
+  return marketsInflight;
+}
+
 // ---- Portfolio (city-wide ownership) ----
 
-export async function fetchOwners(opts: {
-  outOfState?: boolean;
-  search?: string;
-  limit?: number;
-} = {}): Promise<OwnerCluster[]> {
-  const url = new URL(`${BASE}/api/portfolio/denver/owners`, typeof window !== "undefined" ? window.location.origin : undefined);
+export async function fetchOwners(
+  market: MarketKey,
+  opts: {
+    outOfState?: boolean;
+    search?: string;
+    limit?: number;
+  } = {}
+): Promise<OwnerCluster[]> {
+  const url = new URL(`${BASE}/api/portfolio/${market}/owners`, typeof window !== "undefined" ? window.location.origin : undefined);
   if (opts.outOfState) url.searchParams.set('outOfState', '1');
   if (opts.search) url.searchParams.set('search', opts.search);
   if (opts.limit) url.searchParams.set('limit', String(opts.limit));
   const res = await apiFetch(url);
   if (!res.ok) throw new Error(`API ${res.status}`);
   const body = await res.json();
+  if (body.status !== 'ok') throw new Error(body.message ?? 'Portfolio not available for this market');
   return body.data.clusters as OwnerCluster[];
 }
 
-export async function fetchOwner(name: string): Promise<OwnerCluster> {
-  const url = new URL(`${BASE}/api/portfolio/denver/owner`, typeof window !== "undefined" ? window.location.origin : undefined);
+export async function fetchOwner(market: MarketKey, name: string): Promise<OwnerCluster> {
+  const url = new URL(`${BASE}/api/portfolio/${market}/owner`, typeof window !== "undefined" ? window.location.origin : undefined);
   url.searchParams.set('name', name);
   const res = await apiFetch(url);
   if (!res.ok) throw new Error(`API ${res.status}`);
   const body = await res.json();
+  if (body.status !== 'ok') throw new Error(body.message ?? 'Portfolio not available for this market');
   return body.data as OwnerCluster;
 }
 
-export async function fetchSosEntity(name: string): Promise<SosEntity | null> {
+export async function fetchSosEntity(name: string, state = 'CO'): Promise<SosEntity | null> {
   const url = new URL(`${BASE}/api/sos/entity`, typeof window !== "undefined" ? window.location.origin : undefined);
   url.searchParams.set('name', name);
+  url.searchParams.set('state', state);
   const res = await apiFetch(url);
   if (!res.ok) throw new Error(`API ${res.status}`);
   const body = await res.json();
@@ -109,10 +138,11 @@ export async function fetchSosEntity(name: string): Promise<SosEntity | null> {
 // ---- Follow-up ----
 
 export async function fetchFollowup(
+  market: MarketKey,
   zone: string,
   opts: { minUnits?: number; minYear?: number; limit?: number } = {}
 ): Promise<FollowupResult> {
-  const url = new URL(`${BASE}/api/followup/denver`, typeof window !== "undefined" ? window.location.origin : undefined);
+  const url = new URL(`${BASE}/api/followup/${market}`, typeof window !== "undefined" ? window.location.origin : undefined);
   url.searchParams.set('zone', zone);
   if (opts.minUnits) url.searchParams.set('minUnits', String(opts.minUnits));
   if (opts.minYear) url.searchParams.set('minYear', String(opts.minYear));
@@ -123,6 +153,7 @@ export async function fetchFollowup(
     throw new Error(`API ${res.status}: ${text.slice(0, 120)}`);
   }
   const body = await res.json();
+  if (body.status !== 'ok') throw new Error(body.message ?? 'Follow-up not available for this market');
   return body.data as FollowupResult;
 }
 

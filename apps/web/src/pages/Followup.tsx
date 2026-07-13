@@ -1,13 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import type { FollowupResult, FollowupScored } from '@mfa/shared';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import type { FollowupResult, FollowupScored, MarketKey } from '@mfa/shared';
 import { fetchFollowup } from '../lib/api';
+import { useMarkets, DEFAULT_MARKET, setStoredMarket } from '../lib/markets';
+import MarketSelect from '../components/MarketSelect';
 
 type SortKey = 'score' | 'units' | 'yearBuilt' | 'yearsHeld' | 'salePrice' | 'owner';
 
 export default function Followup() {
   const [params] = useSearchParams();
+  const navigate = useNavigate();
   const zone = params.get('zone') ?? '';
+  const market = (params.get('market') as MarketKey) || DEFAULT_MARKET;
+  const { markets } = useMarkets();
+  const cfg = markets.find((m) => m.key === market);
   const [minUnits, setMinUnits] = useState<number>(100);
   const [minYear, setMinYear] = useState<number>(1990);
   const [result, setResult] = useState<FollowupResult | null>(null);
@@ -16,12 +22,17 @@ export default function Followup() {
   const [sort, setSort] = useState<SortKey>('score');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
+  function onMarketChange(next: MarketKey) {
+    setStoredMarket(next);
+    navigate(`/hotspots?market=${next}`);
+  }
+
   useEffect(() => {
     if (!zone) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchFollowup(zone, { minUnits, minYear, limit: 200 })
+    fetchFollowup(market, zone, { minUnits, minYear, limit: 200 })
       .then((r) => {
         if (!cancelled) setResult(r);
       })
@@ -34,7 +45,7 @@ export default function Followup() {
     return () => {
       cancelled = true;
     };
-  }, [zone, minUnits, minYear]);
+  }, [market, zone, minUnits, minYear]);
 
   const rows = useMemo(() => {
     if (!result) return [];
@@ -63,15 +74,18 @@ export default function Followup() {
   return (
     <div className="min-h-screen px-6 py-6">
       <div className="max-w-7xl mx-auto">
-        <div className="mb-4">
-          <Link to="/hotspots" className="text-sm text-indigo-400 hover:text-indigo-300">
-            ← Map
-          </Link>
-          <h1 className="text-2xl font-bold mt-2">{zone || 'Follow-up candidates'}</h1>
-          <p className="text-slate-400 text-sm">
-            Properties matching your buy box in this zone, ranked by follow-up priority (long-hold,
-            non-institutional, out-of-state owners first).
-          </p>
+        <div className="mb-4 flex items-start justify-between flex-wrap gap-3">
+          <div>
+            <Link to={`/hotspots?market=${market}`} className="text-sm text-indigo-400 hover:text-indigo-300">
+              ← Map
+            </Link>
+            <h1 className="text-2xl font-bold mt-2">{zone || 'Follow-up candidates'}</h1>
+            <p className="text-slate-400 text-sm">
+              {cfg?.label ?? ''} — properties matching your buy box in this zone, ranked by
+              follow-up priority (long-hold, non-institutional, out-of-state owners first).
+            </p>
+          </div>
+          <MarketSelect value={market} onChange={onMarketChange} capability="followupSupported" />
         </div>
 
         <div className="flex flex-wrap gap-3 mb-4 items-end">
@@ -98,7 +112,7 @@ export default function Followup() {
           )}
         </div>
 
-        {loading && <p className="text-slate-400">Querying Denver parcels…</p>}
+        {loading && <p className="text-slate-400">Querying {cfg?.label ?? 'market'} parcels…</p>}
         {error && (
           <div className="p-3 rounded border border-rose-500/40 bg-rose-500/10 text-rose-200 text-sm">
             {error}
@@ -122,7 +136,7 @@ export default function Followup() {
               </thead>
               <tbody>
                 {rows.map((c) => (
-                  <Row key={c.parcelId ?? c.address} c={c} />
+                  <Row key={c.parcelId ?? c.address} c={c} market={market} locationLabel={cfg?.label ?? ''} />
                 ))}
               </tbody>
             </table>
@@ -140,7 +154,8 @@ export default function Followup() {
   );
 }
 
-function Row({ c }: { c: FollowupScored }) {
+function Row({ c, market, locationLabel }: { c: FollowupScored; market: MarketKey; locationLabel: string }) {
+  const fullAddress = locationLabel ? `${c.address}, ${locationLabel}` : c.address;
   return (
     <tr className="border-b border-slate-800/50 hover:bg-slate-800/30">
       <td className="py-2 px-3 align-top">
@@ -148,7 +163,7 @@ function Row({ c }: { c: FollowupScored }) {
       </td>
       <td className="py-2 px-3 align-top">
         <Link
-          to={`/property?address=${encodeURIComponent(c.address + ', Denver, CO')}`}
+          to={`/property?address=${encodeURIComponent(fullAddress)}`}
           className="text-slate-100 hover:text-indigo-300"
         >
           {c.address}
@@ -160,7 +175,7 @@ function Row({ c }: { c: FollowupScored }) {
       <td className="py-2 px-3 text-slate-300 align-top">
         {c.owner ? (
           <Link
-            to={`/owner?name=${encodeURIComponent(c.owner)}`}
+            to={`/owner?name=${encodeURIComponent(c.owner)}&market=${market}`}
             className="hover:text-indigo-300"
             title="See all properties by this owner"
           >
@@ -183,13 +198,13 @@ function Row({ c }: { c: FollowupScored }) {
       <td className="py-2 px-3 text-right align-top whitespace-nowrap">
         <div className="flex flex-col gap-1 items-end">
           <Link
-            to={`/property?address=${encodeURIComponent(c.address + ', Denver, CO')}`}
+            to={`/property?address=${encodeURIComponent(fullAddress)}`}
             className="text-indigo-400 hover:text-indigo-300 text-xs"
           >
             Analyze →
           </Link>
           <Link
-            to={`/loi?address=${encodeURIComponent(c.address + ', Denver, CO')}${c.units ? `&units=${c.units}` : ''}`}
+            to={`/loi?address=${encodeURIComponent(fullAddress)}${c.units ? `&units=${c.units}` : ''}`}
             className="text-emerald-400 hover:text-emerald-300 text-xs"
           >
             Start LOI →
