@@ -29,7 +29,7 @@ export async function apiFetch(input: string | URL, init?: RequestInit): Promise
 // ---- Billing (Stripe) ----
 
 export async function createCheckoutSession(plan: 'pro' | 'team'): Promise<{ url: string }> {
-  const res = await apiFetch(`${BASE}/api/billing/checkout`, {
+  const res = await apiFetch(`${BASE}/api/billing/checkout-session`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ plan }),
@@ -42,7 +42,7 @@ export async function createCheckoutSession(plan: 'pro' | 'team'): Promise<{ url
 }
 
 export async function createPortalSession(): Promise<{ url: string }> {
-  const res = await apiFetch(`${BASE}/api/billing/portal`, { method: 'POST' });
+  const res = await apiFetch(`${BASE}/api/billing/portal-session`, { method: 'POST' });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     throw new Error(body?.message ?? `API ${res.status}`);

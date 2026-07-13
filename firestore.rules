@@ -30,21 +30,12 @@ function isAdmin() {
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Each user's own profile/plan doc, keyed by uid. plan/planStatus/
-    // stripeCustomerId/stripeSubscriptionId are server-authoritative — only
-    // the Stripe webhook (via the Admin SDK, which bypasses these rules
-    // entirely) may set them, so a client can never grant itself a paid plan.
+    // Each user's own profile doc, keyed by uid. Billing/subscription state
+    // (plan, subscription status, Stripe customer/subscription IDs) lives in
+    // Postgres (billing_accounts, see apps/api/src/db/billingAccountsRepo.ts)
+    // — not here — so there's nothing billing-related to lock down on this doc.
     match /users/{uid} {
-      allow read: if isSignedIn() && request.auth.uid == uid;
-
-      allow create: if isSignedIn() && request.auth.uid == uid
-        && request.resource.data.plan == 'free'
-        && !('stripeCustomerId' in request.resource.data)
-        && !('stripeSubscriptionId' in request.resource.data);
-
-      allow update: if isSignedIn() && request.auth.uid == uid
-        && !request.resource.data.diff(resource.data).affectedKeys()
-             .hasAny(['plan', 'planStatus', 'stripeCustomerId', 'stripeSubscriptionId']);
+      allow read, write: if isSignedIn() && request.auth.uid == uid;
     }
 
     match /deals/{dealId} {

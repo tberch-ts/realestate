@@ -9,14 +9,13 @@ import { PLAN_TIERS } from '../types/plan'
 
 const googleProvider = new GoogleAuthProvider()
 
-// Every account starts on the free plan — 'plan' is server-authoritative
-// (see firestore.rules), only the Stripe webhook ever upgrades it. A paid
-// plan picked here just fast-tracks the user straight to Checkout next.
+// Billing/plan state lives in Postgres (billing_accounts), not here — every
+// account just gets a plain profile doc. A paid plan picked at sign-up fast-
+// tracks the user straight to Checkout next (see afterSignUp below).
 async function createUserDoc(uid: string, email: string | null, displayName: string | null) {
   await setDoc(doc(db, 'users', uid), {
     email,
     displayName,
-    plan: 'free',
     createdAt: serverTimestamp(),
   })
 }

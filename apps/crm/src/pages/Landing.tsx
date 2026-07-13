@@ -515,6 +515,12 @@ export function PricingGrid({ currentPlan, onUpgrade }: {
                 >
                   Current plan
                 </div>
+              ) : isFree && onUpgrade ? (
+                // Settings context (an onUpgrade handler means we're managing
+                // an existing account, not the public landing page) — no
+                // Stripe Checkout flow downgrades to free, so there's nothing
+                // actionable here for a paid subscriber.
+                null
               ) : isFree ? (
                 <Link
                   to="/sign-up"

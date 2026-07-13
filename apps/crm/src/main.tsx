@@ -24,7 +24,7 @@ import Filings from './pages/Filings';
 import Followup from './pages/Followup';
 import Playbook from './pages/Playbook';
 import Settings from './pages/Settings';
-import Billing from './pages/Billing';
+import BillingSettings from './pages/BillingSettings';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
@@ -55,7 +55,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
               <Route path="capital" element={<ComingSoon feature="Capital Raise" />} />
               <Route path="learn" element={<ComingSoon feature="Learn" />} />
               <Route path="settings" element={<Settings />} />
-              <Route path="settings/billing" element={<Billing />} />
+              <Route path="settings/billing" element={<BillingSettings />} />
             </Route>
           </Route>
         </Routes>

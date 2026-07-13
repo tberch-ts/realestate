@@ -19,13 +19,6 @@ export interface UserProfile {
   uid?: string
   email?: string
   displayName?: string
-  // plan/planStatus/stripe* are server-authoritative — only the Stripe
-  // webhook (via the Admin SDK, which bypasses firestore.rules) may set
-  // them. Clients may only ever create their own doc with plan: 'free'.
-  plan?: string
-  planStatus?: string
-  stripeCustomerId?: string
-  stripeSubscriptionId?: string
   createdAt?: unknown
   postgridSender?: PostgridSender
 }
