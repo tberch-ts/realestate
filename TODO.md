@@ -1,198 +1,76 @@
-# TODO — Phase 6: Deploy to DigitalOcean App Platform
+# Open items — consolidated 2026-07-13
 
-> **For the next Claude Code session:** The user approved this plan on 2026-04-17 but the previous session was running in the wrong worktree (`presence-react` under `MultiFamily`). Resume execution from **this** directory (`C:\Users\Tom\Documents\GitHub\multifamily-analyzer`). All four open questions are already answered below — **do not re-ask**.
+Supersedes the previous contents of this file (a DigitalOcean App Platform
+deploy plan from Phase 6 — abandoned; see [project-docs/DEPLOY_FLY.md](project-docs/DEPLOY_FLY.md)
+for the current Fly.io + GitHub Pages topology, which is live). Pulls together
+scattered open items from `project-docs/ROADMAP.md`, `QA_CHECKLIST.md`,
+`HANDOFF.md`, and this session's work so there's one place to pick up from.
 
-## Locked-in answers (from user, 2026-04-17)
+## 1. Land this session's work (Market Intel + Capital Raise)
 
-| Question | Answer |
-|---|---|
-| GitHub repo | `tberch-ts/realestate` (already pushed) |
-| Custom domain | `re.talkstud.io` |
-| Basic auth creds | Claude picks. **Use:** user `mfa`, pass `Sunrise-Crane-Altitude-8421`. Surface them to the user in the first response, and note they rotate via App Platform env vars. |
-| Persistent cache volume | Yes — attach per-component disk to `api` at `/app/apps/api/.cache` (~$1/mo). |
+Built in `apps/crm` on branch `claude/market-intel-capital-raise-9d68e9`, not yet committed:
 
-## Decisions locked in
+- [ ] Review and commit: `apps/crm/src/pages/MarketIntel.tsx`, `CapitalRaise.tsx`,
+      `CapitalRaiseDetail.tsx`, plus edits to `lib/api.ts`, `lib/collections.ts`,
+      `main.tsx`, `firestore.indexes.json`, `project-docs/QA_CHECKLIST.md`
+- [ ] Deploy the new Firestore index: `firebase deploy --only firestore:indexes --project smartinvestorcrm`
+      (capital_raises: ownerId asc + updatedAt desc — first live query against it will
+      otherwise fail with a "missing index" error and a console link)
+- [ ] Rebuild `docs/` for GitHub Pages **with a real repo-root `.env`** (needs
+      `VITE_GOOGLE_MAPS_API_KEY` at minimum) before merging — a build without it
+      silently ships a broken bundle (see the incident noted in `runtimeEnv.ts`
+      and DEPLOY_FLY.md). This worktree has no real `.env`, only `.env.example`,
+      so the build was verified for compile-correctness only, not rebuilt into `docs/`.
+- [ ] Live QA per the new checklist sections in `project-docs/QA_CHECKLIST.md`
+      ("Market Intel" and "Capital Raise") — this dev sandbox has no Firebase
+      emulator or test login, so someone with real sign-in access needs to
+      click through both features once deployed.
 
-- **Platform:** App Platform (PaaS), not DOKS. No k8s manifests, no DOCR, no `doctl` scripts beyond `apps create`.
-- **Source:** GitHub auto-deploy on push to `main`. App Platform builds Dockerfiles directly.
-- **Environments:** prod only (no staging).
-- **Access control:** Basic auth at the nginx web container; same creds enforced in Express middleware on the API.
-- **DB:** App Platform managed Postgres dev tier ($15/mo). `DATABASE_URL` injected via binding `${mfa-db.DATABASE_URL}`.
-- **Routing:** one domain. `web` serves `/` and proxies `/api/*` to internal `api:4000`. API has no public route.
-- **TLS:** App Platform auto-manages certs (default subdomain + `re.talkstud.io`).
+## 2. Deploy / infra follow-ups
 
-## Architecture
+- [ ] **Reconcile `functions/index.js`** (Firebase Functions wrapping the Express
+      API) vs. `mfa-api.fly.dev` (Fly.io, what `runtimeEnv.ts` actually points
+      production builds at). The Functions path looks like a leftover from
+      before the Fly.io migration — confirm whether it's still deployed/used
+      anywhere, and delete it if not, or document why it's kept.
+- [ ] **Phase 9f — HUD_API_TOKEN + BLS_API_KEY**: waiting on user signup (both
+      free, ~90 sec each). See `project-docs/ROADMAP.md` for the exact signup
+      links and the `fly secrets set` command to inject once obtained. Unlocks
+      Fair Market Rents on every property page + raises BLS from 25/day to 500/day.
 
-```
-GitHub (main) ──auto-deploy──▶  App Platform
-                                   │
-                                   ├─ web  (Dockerfile: infra/Dockerfile.web.prod)
-                                   │   nginx + Vite static + htpasswd
-                                   │   route: /*
-                                   │   proxy /api → http://api:4000
-                                   │
-                                   ├─ api  (Dockerfile: infra/Dockerfile.api.prod)
-                                   │   node + express, internal only on :4000
-                                   │   basic-auth middleware (skips /health)
-                                   │   persistent disk at /app/apps/api/.cache
-                                   │
-                                   └─ mfa-db  (managed Postgres dev tier)
-                                       DATABASE_URL binding → api
-```
+## 3. Feature backlog (from `project-docs/ROADMAP.md`)
 
-## Files to create
+- [ ] **Phase 9d — geographic expansion beyond Denver** (deferred 2026-04-18).
+      Pick Path A (RentCast paid, ~2hrs/$49mo), B (per-city free, 3-5hrs/city),
+      or C (hybrid) — see ROADMAP.md for the full 20-city investability ranking
+      already computed and the per-city investigation notes (Maricopa/King/Multnomah).
+- [ ] Smaller-operator portfolio dataset — current Denver portfolio filters to
+      100+ unit buildings, missing small syndicators (e.g. ALL PRO). Add a
+      lower-threshold variant.
+- [ ] Gmail OAuth + IMAP reply sync — upgrade outreach from mailto fire-and-forget
+      to real SMTP send + auto-detected replies.
+- [ ] CRM deduplication — repeat sponsor names across Form D filings (e.g. "ALL
+      PRO CAPITAL LLC") currently create a fresh contact per filing instead of
+      collapsing onto one entity.
+- [ ] Form D dashboard widget on Home — "this week's new sponsors in CO" tile.
+- [ ] Property page: surface matched CRM contacts inline when the owner is
+      already in the user's contacts.
 
-- [ ] `infra/Dockerfile.api.prod` — multi-stage Node 20 alpine, non-root, `node dist/index.js`
-- [ ] `infra/Dockerfile.web.prod` — Vite build stage, `nginx:1.27-alpine` runtime
-- [ ] `infra/nginx.conf` — auth_basic on `/`, proxy `/api/` → `http://api:4000`, forward `Authorization` header
-- [ ] `infra/docker-entrypoint-web.sh` — writes `/usr/share/nginx/html/env.js` + `/etc/nginx/.htpasswd` at container start
-- [ ] `apps/web/src/lib/runtimeEnv.ts` — exports `API_URL`, `GOOGLE_MAPS_API_KEY`; reads `window.__ENV__` first, `import.meta.env.VITE_*` fallback
-- [ ] `apps/api/src/middleware/basicAuth.ts` — checks `Authorization: Basic`, skips `/health`, compares against `BASIC_AUTH_USER`/`BASIC_AUTH_PASS`
-- [ ] `.do/app.yaml` — App Spec (see below)
-- [ ] `docker-compose.prod.yml` — local smoke test mirror
-- [ ] `project-docs/DEPLOY.md` — first-time setup notes (create app from spec, set secrets, custom domain DNS)
+## 4. Known gaps (from `QA_CHECKLIST.md`)
 
-## Files to modify
+- [ ] `Learn` and parts of `Settings/Billing` are still `ComingSoon` placeholders.
+- [ ] No invite UI for adding a `members` teammate to a deal/LOI/capital raise —
+      the field and Firestore rules support it, only reachable by hand-editing
+      Firestore today.
+- [ ] No standalone underwriting calculator in `apps/crm` (existed as `apps/web`'s
+      `/deal` page) — Playbook's CTA for it currently points at the Deal Board instead.
 
-- [ ] `apps/web/index.html` — add `<script src="/env.js"></script>` before main bundle
-- [ ] `apps/web/src/lib/api.ts` — import from `runtimeEnv` instead of `import.meta.env`
-- [ ] `apps/web/src/pages/Hotspots.tsx` — same
-- [ ] `apps/web/src/pages/Home.tsx` — same
-- [ ] `apps/api/src/index.ts` — mount basic-auth middleware
-- [ ] `apps/api/src/db/migrate.ts` — verify idempotent (`CREATE TABLE IF NOT EXISTS`)
-- [ ] `apps/api/package.json` — confirm `build` + `start` prod scripts
-- [ ] `README.md` — deploy section
+## 5. Stale docs worth reconciling
 
-## `.do/app.yaml` spec (reference — adjust paths/versions to match current repo state)
-
-```yaml
-name: multifamily-analyzer
-region: nyc
-
-databases:
-  - name: mfa-db
-    engine: PG
-    version: "16"
-    size: db-s-dev-database
-    num_nodes: 1
-    production: false
-
-services:
-  - name: api
-    dockerfile_path: infra/Dockerfile.api.prod
-    source_dir: /
-    github:
-      repo: tberch-ts/realestate
-      branch: main
-      deploy_on_push: true
-    http_port: 4000
-    instance_size_slug: basic-xs
-    instance_count: 1
-    health_check:
-      http_path: /health
-      initial_delay_seconds: 15
-    disk:
-      # persistent cache volume — user opted in
-      name: api-cache
-      mount_path: /app/apps/api/.cache
-      size_gib: 1
-    envs:
-      - { key: NODE_ENV, value: production, scope: RUN_TIME }
-      - { key: DATABASE_URL, value: "${mfa-db.DATABASE_URL}", scope: RUN_TIME }
-      - { key: GOOGLE_MAPS_API_KEY, scope: RUN_TIME, type: SECRET }
-      - { key: CENSUS_API_KEY, scope: RUN_TIME, type: SECRET }
-      - { key: BLS_API_KEY, scope: RUN_TIME, type: SECRET }
-      - { key: FBI_API_KEY, scope: RUN_TIME, type: SECRET }
-      - { key: BASIC_AUTH_USER, scope: RUN_TIME, type: SECRET }
-      - { key: BASIC_AUTH_PASS, scope: RUN_TIME, type: SECRET }
-
-  - name: web
-    dockerfile_path: infra/Dockerfile.web.prod
-    source_dir: /
-    github:
-      repo: tberch-ts/realestate
-      branch: main
-      deploy_on_push: true
-    http_port: 80
-    instance_size_slug: basic-xs
-    instance_count: 1
-    routes:
-      - path: /
-    envs:
-      - { key: API_URL, value: "/api", scope: RUN_TIME }
-      - { key: GOOGLE_MAPS_API_KEY, scope: RUN_TIME, type: SECRET }
-      - { key: BASIC_AUTH_USER, scope: RUN_TIME, type: SECRET }
-      - { key: BASIC_AUTH_PASS, scope: RUN_TIME, type: SECRET }
-
-jobs:
-  - name: db-migrate
-    kind: PRE_DEPLOY
-    dockerfile_path: infra/Dockerfile.api.prod
-    run_command: node apps/api/dist/db/migrate.js
-    envs:
-      - { key: DATABASE_URL, value: "${mfa-db.DATABASE_URL}", scope: RUN_TIME }
-
-domains:
-  - domain: re.talkstud.io
-    type: PRIMARY
-```
-
-> **Note on `disk:`** — confirm the exact App Spec syntax against current DO docs; if the key differs, adjust. The semantic intent is a 1 GiB persistent volume mounted at `/app/apps/api/.cache` on the api service.
-
-## Execution order
-
-1. Verify the repo at `C:\Users\Tom\Documents\GitHub\multifamily-analyzer` is on a clean branch and tracking `tberch-ts/realestate`. If not, fix that first.
-2. Create prod Dockerfiles + nginx config + web entrypoint.
-3. Add runtime env shim (`runtimeEnv.ts`) + update `index.html` + refactor the 3 call sites.
-4. Add basic-auth middleware to the API; mount it in `index.ts` ahead of all routes except `/health`.
-5. Verify `migrate.ts` is idempotent.
-6. Write `.do/app.yaml` with the repo, domain, and disk values above.
-7. Write `docker-compose.prod.yml` and run `docker compose -f docker-compose.prod.yml up --build` to smoke-test the prod topology locally.
-8. Write `project-docs/DEPLOY.md`.
-9. Commit, push to `main`.
-10. Tell the user to run `doctl apps create --spec .do/app.yaml` (or click-through the DO console), then populate the SECRET env vars — including the basic-auth creds above — and point `re.talkstud.io` CNAME at the App Platform target.
-
-## Verification (after first deploy)
-
-1. Visit the generated `*.ondigitalocean.app` URL → browser prompts for basic auth → enter `mfa` / `Sunrise-Crane-Altitude-8421` → homepage loads.
-2. Hot-zone strip renders; `/hotspots` map loads.
-3. `/portfolio?oos=1` shows absentee owners; click PBH BREAKERS → `/owner` → "Unmask owner" pulls SOS data (confirms outbound HTTP from App Platform).
-4. Start an LOI at `/loi?address=...` → autosave succeeds (confirms managed DB + basic-auth + migrate job all wired).
-5. Push a trivial change to `main` → App Platform auto-rebuilds and rolls over with zero downtime.
-6. `doctl apps logs <app-id> --type=run` shows structured API logs.
-7. Once `re.talkstud.io` CNAME propagates and App Platform issues the cert, https works on the custom domain.
-
-## Cost (v1 scale)
-
-| Component | Tier | Cost |
-|---|---|---|
-| api service | basic-xs | $5 |
-| web service | basic-xs | $5 |
-| mfa-db (managed Postgres) | dev database | $15 |
-| api-cache persistent disk | 1 GiB | ~$1 |
-| Bandwidth | first 100 GB | $0 |
-| **Total** | | **~$26/mo** |
-
-## Deliver-to-user once push lands
-
-```
-Deploy spec pushed. To stand up the app:
-
-  doctl apps create --spec .do/app.yaml
-
-Then in the DO console (App → Settings → App-Level Environment Variables),
-populate these SECRET values:
-
-  GOOGLE_MAPS_API_KEY   = (from your local .env)
-  CENSUS_API_KEY        = (optional)
-  BLS_API_KEY           = (optional)
-  FBI_API_KEY           = (optional)
-  BASIC_AUTH_USER       = mfa
-  BASIC_AUTH_PASS       = Sunrise-Crane-Altitude-8421
-
-DNS: point `re.talkstud.io` CNAME at the App Platform target shown
-under App → Settings → Domains. App Platform provisions TLS automatically.
-
-First deploy takes 8–12 min. Hit the ondigitalocean.app URL to confirm
-before DNS cuts over.
-```
+- [ ] `project-docs/ACQUISITION_CRITERIA.md` marks job growth (BLS), crime (FBI
+      UCR), and landlord-friendliness as "not yet implemented — add in next
+      phase" — all three are actually implemented (`apps/api/src/providers/bls.ts`,
+      `fbiUcr.ts`, `landlordFriendliness.ts`). Update the doc to match reality.
+- [ ] `project-docs/data-sources-by-msa.md` has per-MSA `deferred` markers
+      (Phoenix/Austin/Nashville/Charlotte/Tampa/Raleigh — assessor/neighborhoods/
+      followup/portfolio) that should be revisited alongside Phase 9d above.

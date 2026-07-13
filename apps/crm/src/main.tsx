@@ -23,6 +23,9 @@ import Owner from './pages/Owner';
 import Filings from './pages/Filings';
 import Followup from './pages/Followup';
 import Playbook from './pages/Playbook';
+import MarketIntel from './pages/MarketIntel';
+import CapitalRaise from './pages/CapitalRaise';
+import CapitalRaiseDetail from './pages/CapitalRaiseDetail';
 import Settings from './pages/Settings';
 import BillingSettings from './pages/BillingSettings';
 
@@ -51,8 +54,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
               <Route path="filings" element={<Filings />} />
               <Route path="followup" element={<Followup />} />
               <Route path="playbook" element={<Playbook />} />
-              <Route path="market" element={<ComingSoon feature="Market Intel" />} />
-              <Route path="capital" element={<ComingSoon feature="Capital Raise" />} />
+              <Route path="market" element={<MarketIntel />} />
+              <Route path="capital" element={<CapitalRaise />} />
+              <Route path="capital/:id" element={<CapitalRaiseDetail />} />
               <Route path="learn" element={<ComingSoon feature="Learn" />} />
               <Route path="settings" element={<Settings />} />
               <Route path="settings/billing" element={<BillingSettings />} />
