@@ -1,13 +1,26 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import type { FollowupResult, FollowupScored } from '@mfa/shared';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import type { FollowupResult, FollowupScored, MarketKey } from '@mfa/shared';
 import { fetchFollowup } from '../lib/api';
+import { useMarkets, DEFAULT_MARKET, setStoredMarket } from '../lib/markets';
+import MarketSelect from '../components/MarketSelect';
 
 type SortKey = 'score' | 'units' | 'yearBuilt' | 'yearsHeld' | 'salePrice' | 'owner';
 
 export default function Followup() {
   const [params] = useSearchParams();
+  const navigate = useNavigate();
   const zone = params.get('zone') ?? '';
+  const market = (params.get('market') as MarketKey) || DEFAULT_MARKET;
+  const { markets } = useMarkets();
+  const cfg = markets.find((m) => m.key === market);
+
+  function onMarketChange(next: MarketKey) {
+    setStoredMarket(next);
+    // Zone names don't carry across markets — switching market drops the
+    // zone and sends the user back to that market's Hotspots map.
+    navigate(`/app/hotspots?market=${next}`);
+  }
   const [minUnits, setMinUnits] = useState<number>(100);
   const [minYear, setMinYear] = useState<number>(1990);
   const [result, setResult] = useState<FollowupResult | null>(null);
@@ -21,7 +34,7 @@ export default function Followup() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchFollowup(zone, { minUnits, minYear, limit: 200 })
+    fetchFollowup(market, zone, { minUnits, minYear, limit: 200 })
       .then((r) => {
         if (!cancelled) setResult(r);
       })
@@ -34,7 +47,7 @@ export default function Followup() {
     return () => {
       cancelled = true;
     };
-  }, [zone, minUnits, minYear]);
+  }, [market, zone, minUnits, minYear]);
 
   const rows = useMemo(() => {
     if (!result) return [];
@@ -62,15 +75,18 @@ export default function Followup() {
 
   return (
     <div>
-      <div className="mb-4">
-        <Link to="/app/hotspots" className="text-sm text-blue-400 hover:text-blue-300">
-          ← Map
-        </Link>
-        <h1 className="text-2xl font-bold mt-2">{zone || 'Follow-up candidates'}</h1>
-        <p className="text-sm text-gray-500">
-          Properties matching your buy box in this zone, ranked by follow-up priority (long-hold,
-          non-institutional, out-of-state owners first).
-        </p>
+      <div className="mb-4 flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <Link to={`/app/hotspots?market=${market}`} className="text-sm text-blue-400 hover:text-blue-300">
+            ← Map
+          </Link>
+          <h1 className="text-2xl font-bold mt-2">{zone || 'Follow-up candidates'}</h1>
+          <p className="text-sm text-gray-500">
+            {cfg?.label ?? ''} — properties matching your buy box in this zone, ranked by
+            follow-up priority (long-hold, non-institutional, out-of-state owners first).
+          </p>
+        </div>
+        <MarketSelect value={market} onChange={onMarketChange} capability="followupSupported" />
       </div>
 
       <div className="flex flex-wrap gap-3 mb-4 items-end">
@@ -88,7 +104,7 @@ export default function Followup() {
       </div>
 
       {!zone && <p className="text-sm text-gray-500">Pick a zone from the Hotspots map to see follow-up candidates.</p>}
-      {loading && <p className="text-gray-400 text-sm">Querying Denver parcels…</p>}
+      {loading && <p className="text-gray-400 text-sm">Querying {cfg?.label ?? 'market'} parcels…</p>}
       {error && (
         <div className="p-3 rounded border border-rose-500/40 bg-rose-500/10 text-rose-200 text-sm">{error}</div>
       )}
@@ -110,7 +126,7 @@ export default function Followup() {
             </thead>
             <tbody>
               {rows.map((c) => (
-                <Row key={c.parcelId ?? c.address} c={c} />
+                <Row key={c.parcelId ?? c.address} c={c} market={market} locationLabel={cfg?.label ?? ''} />
               ))}
             </tbody>
           </table>
@@ -126,21 +142,22 @@ export default function Followup() {
   );
 }
 
-function Row({ c }: { c: FollowupScored }) {
+function Row({ c, market, locationLabel }: { c: FollowupScored; market: MarketKey; locationLabel: string }) {
+  const fullAddress = locationLabel ? `${c.address}, ${locationLabel}` : c.address;
   return (
     <tr className="border-t hover:bg-white/5 transition-colors" style={{ borderColor: 'var(--border)' }}>
       <td className="py-2 px-3 align-top">
         <span className={`text-lg font-bold ${scoreColor(c.score)}`}>{c.score}</span>
       </td>
       <td className="py-2 px-3 align-top">
-        <Link to={`/app/property-search?address=${encodeURIComponent(c.address + ', Denver, CO')}`} className="text-gray-100 hover:text-blue-300">
+        <Link to={`/app/property-search?address=${encodeURIComponent(fullAddress)}`} className="text-gray-100 hover:text-blue-300">
           {c.address}
         </Link>
         {c.reasons.length > 0 && <div className="text-xs text-gray-500 italic mt-0.5">{c.reasons.join(' · ')}</div>}
       </td>
       <td className="py-2 px-3 text-gray-300 align-top">
         {c.owner ? (
-          <Link to={`/app/owner?name=${encodeURIComponent(c.owner)}`} className="hover:text-blue-300" title="See all properties by this owner">
+          <Link to={`/app/owner?name=${encodeURIComponent(c.owner)}&market=${market}`} className="hover:text-blue-300" title="See all properties by this owner">
             {c.owner}
           </Link>
         ) : (
@@ -159,11 +176,11 @@ function Row({ c }: { c: FollowupScored }) {
       </td>
       <td className="py-2 px-3 text-right align-top whitespace-nowrap">
         <div className="flex flex-col gap-1 items-end">
-          <Link to={`/app/property-search?address=${encodeURIComponent(c.address + ', Denver, CO')}`} className="text-blue-400 hover:text-blue-300 text-xs">
+          <Link to={`/app/property-search?address=${encodeURIComponent(fullAddress)}`} className="text-blue-400 hover:text-blue-300 text-xs">
             Analyze →
           </Link>
           <Link
-            to={`/app/loi?address=${encodeURIComponent(c.address + ', Denver, CO')}${c.units ? `&units=${c.units}` : ''}`}
+            to={`/app/loi?address=${encodeURIComponent(fullAddress)}${c.units ? `&units=${c.units}` : ''}`}
             className="text-emerald-400 hover:text-emerald-300 text-xs"
           >
             Start LOI →

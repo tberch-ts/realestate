@@ -3,19 +3,39 @@ import {
   Building2, FileText, TrendingUp,
   GraduationCap, ListChecks, DollarSign, Zap, Check,
   ArrowRight, MapPin, Shield, Database, ChevronDown, Star,
-  Activity, Search, Calculator, Kanban,
+  Search, Calculator, Kanban,
 } from 'lucide-react'
 import { useState } from 'react'
 import { PLAN_TIERS, PLAN_ORDER } from '../types/plan'
 
 // ── Features ─────────────────────────────────────────────────────────────────
+// Order leads with lead-finding (scoring, hotspot map, property search,
+// market intel), then the close-the-deal toolkit.
 
 const FEATURES = [
   {
+    icon: Zap, color: '#ef4444',
+    title: 'Deal Scoring Engine',
+    sub: 'Weighted 0–100 opportunity score',
+    body: 'Every area and deal gets an automated score blending public data with underwriting metrics (cap rate, DSCR, CoC) and market signals. Sort by score — highest upside floats to the top.',
+  },
+  {
+    icon: MapPin, color: '#f97316',
+    title: 'Hotspot Map',
+    sub: 'Every neighborhood rated, 6 metros',
+    body: 'Color-coded map of every neighborhood in Phoenix, Nashville, Charlotte, Raleigh, Tampa, and Austin — scored by median income, rent, density, and rent burden. Click any zone for property candidates.',
+  },
+  {
     icon: Search, color: '#3b82f6',
     title: 'Property Search',
-    sub: 'Instant data on any Denver address',
-    body: 'Enter any address and get assessed value, unit count, lot size, year built, zoning, and assessor data in seconds — no login to county portals required.',
+    sub: 'Instant data on any address',
+    body: 'Enter any address in your market and get assessed value, unit count, lot size, year built, zoning, and assessor data in seconds — no county portal logins required.',
+  },
+  {
+    icon: TrendingUp, color: '#f59e0b',
+    title: 'Market Intelligence',
+    sub: 'Live macro signals per MSA',
+    body: 'Treasury yields, CPI, local unemployment, and cap rate trends pulled live from FRED and BLS. Know whether the macro environment favors buyers or sellers today.',
   },
   {
     icon: Calculator, color: '#8b5cf6',
@@ -27,31 +47,13 @@ const FEATURES = [
     icon: Kanban, color: '#06b6d4',
     title: 'Deal Pipeline',
     sub: '7-stage kanban from lead to close',
-    body: 'Drag deals across Sourcing → LOI → Due Diligence → Financing → Closing → Closed. Firestore real-time sync keeps your whole team on the same board.',
+    body: 'Drag deals across Sourcing → LOI → Due Diligence → Financing → Closing → Closed. Real-time sync keeps your whole team on the same board.',
   },
   {
     icon: FileText, color: '#10b981',
     title: 'LOI Builder',
     sub: 'Professional letter of intent in minutes',
     body: 'Fill the form, click generate. Get a formatted LOI pre-populated from your deal data. Copy to clipboard or save as draft — linked to the deal record.',
-  },
-  {
-    icon: TrendingUp, color: '#f59e0b',
-    title: 'Market Intelligence',
-    sub: 'Live macro signals per MSA',
-    body: 'Treasury yields, CPI, local unemployment, and cap rate trends pulled live from FRED and BLS. Know whether the macro environment favors buyers or sellers today.',
-  },
-  {
-    icon: Zap, color: '#ef4444',
-    title: 'Deal Scoring Engine',
-    sub: 'Weighted 0–100 opportunity score',
-    body: 'Every deal gets an automated score blending underwriting metrics (cap rate, DSCR, CoC) with market signals. Sort your pipeline by score — highest upside floats to the top.',
-  },
-  {
-    icon: MapPin, color: '#f97316',
-    title: 'Hotspot Map',
-    sub: 'Choropleth of 78 Denver neighborhoods',
-    body: 'Color-coded map of every Denver neighborhood scored by median income, rent, population density, and rent burden. Click any zone to see follow-up property candidates.',
   },
   {
     icon: DollarSign, color: '#a855f7',
@@ -63,7 +65,7 @@ const FEATURES = [
     icon: ListChecks, color: '#14b8a6',
     title: '11-Phase Syndication Pipeline',
     sub: 'Checklist from foundation to post-close',
-    body: 'A structured checklist covering every phase of a syndication — entity setup, PSA, due diligence, securities, financing, close, and post-close asset management. Progress persists across devices.',
+    body: 'A structured checklist covering every phase of a syndication — entity setup, PSA, due diligence, securities, financing, close, and post-close asset management.',
   },
   {
     icon: GraduationCap, color: '#64748b',
@@ -74,36 +76,60 @@ const FEATURES = [
 ]
 
 const DATA_SOURCES = [
-  { name: 'Denver Assessor', desc: 'Property records, unit counts, assessed values' },
+  { name: 'County Assessors', desc: 'Property records, unit counts, assessed values — all 6 markets' },
   { name: 'Census ACS', desc: 'Median income, rent, rent burden by tract' },
   { name: 'HUD FMR', desc: 'Fair market rents by bedroom count + MSA' },
   { name: 'FRED / BLS', desc: 'Treasury rates, CPI, local unemployment' },
   { name: 'Google Maps', desc: 'Satellite view, neighborhood polygon boundaries' },
-  { name: 'CoStar stub', desc: 'Cap rate benchmarks (expandable to full API)' },
+  { name: 'SaaS rent & comp feeds', desc: 'Rent comps and cap rate benchmarks via licensed APIs' },
 ]
+
+const MARKETS_LIVE = ['Phoenix', 'Nashville', 'Charlotte', 'Raleigh', 'Tampa', 'Austin']
 
 const STEPS = [
   {
     n: '01', color: '#3b82f6',
-    title: 'Search any address',
-    body: 'Type any Denver multifamily address. Get assessed value, unit count, zoning, and year built from the county assessor — no spreadsheets, no county portal logins.',
+    title: 'Find leads on a scored map',
+    body: 'Every neighborhood in your market is rated 0–100 from public and market data — income, rents, rent burden, density. The highest-upside zones and property candidates surface on their own.',
   },
   {
     n: '02', color: '#8b5cf6',
     title: 'Underwrite in the same tab',
-    body: 'Fill the underwriting form with the data already in front of you. Cap rate, NOI, DSCR, and cash-on-cash update instantly. Save the output directly to the deal record.',
+    body: 'Assessor data is already in front of you. Fill the underwriting form — cap rate, NOI, DSCR, and cash-on-cash update instantly. Save the output directly to the deal record.',
   },
   {
     n: '03', color: '#10b981',
-    title: 'Generate the LOI & track to close',
-    body: 'One click populates a professional LOI. Move the deal through your 7-stage pipeline, track LP commitments, and manage syndication tasks — all in the same dashboard.',
+    title: 'Close the deal',
+    body: 'One click generates a professional LOI. Move the deal through your 7-stage pipeline, track LP commitments, and manage syndication tasks — all the way to close.',
   },
+]
+
+const FIND_LIST = [
+  { name: 'Deal scoring engine', desc: 'weighted 0–100 score on every deal' },
+  { name: 'Hotspot map', desc: 'every neighborhood rated, in 6 metros' },
+  { name: 'Property search', desc: 'assessor data on any address, instantly' },
+  { name: 'Market intelligence', desc: 'live macro signals per MSA' },
+]
+
+const CLOSE_LIST = [
+  { name: 'Underwriting calculator', desc: 'full Year-1 pro-forma in one form' },
+  { name: 'LOI builder', desc: 'professional letter of intent in minutes' },
+  { name: 'Deal pipeline + CRM', desc: '7-stage kanban from lead to close' },
+  { name: 'Capital raise + syndication', desc: 'LP funnel and 11-phase checklist' },
 ]
 
 const FAQS = [
   {
-    q: 'Is this only for Denver?',
-    a: 'The property search, hotspot map, and follow-up candidate engine are currently calibrated for Denver, Colorado. Market intel (FRED/BLS), the LOI builder, pipeline, CRM, and underwriting tools work for any market — you can enter any figures you want.',
+    q: 'Which markets are covered?',
+    a: 'Area scoring, the hotspot map, and property search are live in six metros: Phoenix, Nashville, Charlotte, Raleigh, Tampa, and Austin — with more markets on the roadmap. Market intel, the LOI builder, pipeline, CRM, and underwriting tools work for any market.',
+  },
+  {
+    q: 'Is this a CRM, an underwriting tool, or a leads platform?',
+    a: 'All of it — that’s the point. SmartInvestorCRM is the complete deal maker: a scoring system built on public and SaaS data finds your leads, and the underwriting, pipeline, CRM, LOI, and capital raise tools close them. One platform from scored map to signed close.',
+  },
+  {
+    q: 'How does the scoring system work?',
+    a: 'Every neighborhood is rated from public data — median income, rents, rent burden, population density — and every deal gets a weighted 0–100 score blending underwriting metrics (cap rate, DSCR, cash-on-cash) with live market signals. Scores update as the data does.',
   },
   {
     q: 'How does billing work?',
@@ -112,10 +138,6 @@ const FAQS = [
   {
     q: 'What happens to my data if I cancel?',
     a: 'Your account is immediately downgraded to the Free tier. Your deals, contacts, and LOIs are preserved — you just lose access to Pro/Team features. Data deletion requires you to explicitly request it.',
-  },
-  {
-    q: 'Is this a CRM, an underwriting tool, or a leads platform?',
-    a: 'All three. Most tools in this space do one thing — some find leads, others provide data, spreadsheets do the math. SmartInvestorCRM combines property search, underwriting, CRM, LOI generation, pipeline management, and market intel into one Bloomberg-terminal-style dashboard.',
   },
   {
     q: 'Can multiple people use the same account?',
@@ -136,9 +158,9 @@ export default function Landing() {
       <Hero />
       <TrustStrip />
       <HowItWorks />
+      <FindCloseSplit />
       <Features />
       <DataSources />
-      <Comparison />
       <PricingSection />
       <FAQSection />
       <FinalCTA />
@@ -184,73 +206,116 @@ function Nav() {
 
 // ── Hero ──────────────────────────────────────────────────────────────────────
 
+const LEADERBOARD = [
+  { name: 'Grant Park · PHX', score: 94, color: '#10b981' },
+  { name: 'Antioch · BNA', score: 91, color: '#10b981' },
+  { name: 'NoDa · CLT', score: 87, color: '#3b82f6' },
+  { name: 'Seminole Hts · TPA', score: 84, color: '#3b82f6' },
+  { name: 'East Austin · AUS', score: 79, color: '#f59e0b' },
+]
+
 function Hero() {
   return (
-    <section className="px-6 md:px-10 pt-24 pb-20 text-center max-w-5xl mx-auto">
-      <div
-        className="inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs text-blue-400 mb-8"
-        style={{ borderColor: 'rgba(59,130,246,0.35)', background: 'rgba(59,130,246,0.08)' }}
-      >
-        <Activity size={11} />
-        Live data from 6 real sources — Denver Assessor, Census, HUD, FRED, BLS, Google Maps
+    <section
+      className="px-6 md:px-10 pt-20 pb-22 max-w-[1280px] mx-auto grid grid-cols-1 lg:grid-cols-[1.05fr_0.95fr] gap-12 lg:gap-16 items-center"
+    >
+      <div className="text-center lg:text-left">
+        <div
+          className="inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs text-blue-400 mb-7"
+          style={{ borderColor: 'rgba(59,130,246,0.35)', background: 'rgba(59,130,246,0.08)' }}
+        >
+          <Zap size={11} />
+          The Complete Deal Maker
+        </div>
+
+        <h1 className="text-5xl md:text-[60px] font-bold tracking-tight leading-[1.08] mb-6" style={{ letterSpacing: '-0.025em' }}>
+          From scored lead<br />
+          <span style={{ color: '#3b82f6' }}>to signed close.</span>
+        </h1>
+
+        <p className="text-lg md:text-[19px] text-gray-400 mx-auto lg:mx-0 mb-3.5 leading-relaxed max-w-[560px]">
+          SmartInvestorCRM scores every neighborhood and property with public and market data —
+          so the leads come to you. Then it hands you the underwriting calculator, deal pipeline,
+          LOI builder, CRM, and capital raise tracker to take each one to a signed close.
+        </p>
+
+        <p className="text-sm text-gray-500 mb-6">
+          One score to find the deal. One dashboard to close it.
+        </p>
+
+        <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2 mb-8">
+          <span className="text-[11px] uppercase tracking-wider text-gray-600 mr-1">Live in 6 markets</span>
+          {MARKETS_LIVE.map((m) => (
+            <span
+              key={m}
+              className="px-2.5 py-1 rounded-full border text-xs text-gray-300"
+              style={{ borderColor: 'var(--border)', background: 'var(--bg-card)' }}
+            >
+              {m}
+            </span>
+          ))}
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3 mb-4">
+          <Link
+            to="/sign-up"
+            className="flex items-center gap-2 px-7 py-3.5 rounded-lg font-semibold text-base bg-blue-600 hover:bg-blue-500 transition-colors"
+          >
+            Start for free <ArrowRight size={16} />
+          </Link>
+          <a
+            href="#how-it-works"
+            className="flex items-center gap-2 px-7 py-3.5 rounded-lg font-medium text-base border hover:border-gray-500 transition-colors"
+            style={{ borderColor: 'var(--border)' }}
+          >
+            See how it works <ChevronDown size={16} />
+          </a>
+        </div>
+        <p className="text-xs text-gray-600">No credit card required · Free plan includes 1 active deal · Cancel anytime</p>
       </div>
 
-      <h1 className="text-5xl md:text-6xl font-bold tracking-tight leading-tight mb-6">
-        They find leads.<br />
-        <span style={{ color: '#3b82f6' }}>You close deals.</span>
-      </h1>
-
-      <p className="text-xl text-gray-400 max-w-2xl mx-auto mb-4 leading-relaxed">
-        SmartInvestorCRM is the only platform that takes you from cold address to signed LOI
-        without leaving the tab — property search, underwriting, pipeline, CRM, LOI builder,
-        market intel, and capital raise tracking in one Bloomberg-terminal-style dashboard.
-      </p>
-
-      <p className="text-sm text-gray-500 mb-10">
-        However you find the address, SmartInvestorCRM takes it from there — underwrite it,
-        draft the LOI, and manage it all the way to close.
-      </p>
-
-      <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-6">
-        <Link
-          to="/sign-up"
-          className="flex items-center gap-2 px-7 py-3.5 rounded-lg font-semibold text-base bg-blue-600 hover:bg-blue-500 transition-colors"
-        >
-          Start for free <ArrowRight size={16} />
-        </Link>
-        <a
-          href="#how-it-works"
-          className="flex items-center gap-2 px-7 py-3.5 rounded-lg font-medium text-base border hover:border-gray-500 transition-colors"
-          style={{ borderColor: 'var(--border)' }}
-        >
-          See how it works <ChevronDown size={16} />
-        </a>
-      </div>
-      <p className="text-xs text-gray-600">No credit card required · Free plan includes 1 active deal · Cancel anytime</p>
-
-      {/* Mock terminal stat bar */}
+      {/* Terminal deal dashboard */}
       <div
-        className="mt-14 rounded-2xl border p-5 text-left font-mono text-xs"
-        style={{ background: 'var(--bg-card)', borderColor: 'var(--border)' }}
+        className="rounded-2xl border p-5 text-left font-mono text-xs"
+        style={{ background: 'var(--bg-card)', borderColor: 'var(--border)', boxShadow: '0 24px 64px rgba(0,0,0,0.45)' }}
       >
-        <div className="flex items-center gap-2 mb-3">
+        <div className="flex items-center gap-2 mb-4">
           <span className="w-2.5 h-2.5 rounded-full bg-red-500/70" />
           <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/70" />
           <span className="w-2.5 h-2.5 rounded-full bg-green-500/70" />
           <span className="ml-2 text-gray-600">SmartInvestorCRM — Deal Dashboard</span>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+
+        <div className="grid grid-cols-2 gap-3.5 mb-[18px]">
           {[
-            { label: 'ACTIVE DEALS',   val: '7',     color: '#3b82f6' },
-            { label: 'AVG SCORE',      val: '81/100', color: '#10b981' },
+            { label: 'MARKETS SCORED', val: '6', color: '#3b82f6' },
+            { label: 'AVG DEAL SCORE', val: '81/100', color: '#10b981' },
             { label: 'PIPELINE VALUE', val: '$18.2M', color: '#f59e0b' },
-            { label: 'LP COMMITTED',   val: '$3.1M',  color: '#8b5cf6' },
+            { label: 'LP COMMITTED', val: '$3.1M', color: '#8b5cf6' },
           ].map(({ label, val, color }) => (
-            <div key={label}>
-              <p className="text-gray-600 text-xs mb-0.5">{label}</p>
+            <div key={label} className="rounded-[10px] border p-3" style={{ borderColor: 'var(--border)', background: 'var(--bg-surface)' }}>
+              <p className="text-gray-600 text-[11px] mb-0.5">{label}</p>
               <p className="text-2xl font-bold" style={{ color }}>{val}</p>
             </div>
           ))}
+        </div>
+
+        <p className="text-gray-600 text-[11px] mb-2 tracking-wide">TOP SCORED AREAS — THIS WEEK</p>
+        <div className="flex flex-col gap-2">
+          {LEADERBOARD.map(({ name, score, color }) => (
+            <div key={name} className="grid items-center gap-2.5" style={{ gridTemplateColumns: '150px 1fr 44px' }}>
+              <span className="text-gray-300 truncate">{name}</span>
+              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
+                <div className="h-full" style={{ width: `${score}%`, background: color }} />
+              </div>
+              <span className="font-bold text-right" style={{ color }}>{score}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex items-center justify-between mt-4 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
+          <span className="text-gray-600">Scores refresh nightly from public + SaaS feeds</span>
+          <Link to="/app/hotspots" className="text-blue-400 hover:text-blue-300">View hotspot map →</Link>
         </div>
       </div>
     </section>
@@ -264,9 +329,9 @@ function TrustStrip() {
     <div className="border-y py-5" style={{ borderColor: 'var(--border)', background: 'var(--bg-surface)' }}>
       <div className="max-w-5xl mx-auto px-6 flex flex-wrap items-center justify-center gap-8">
         {[
-          { icon: <Database size={14} className="text-blue-400" />,  label: 'Real data — not mock comps', sub: 'Denver Assessor + Census ACS + HUD FMR + FRED' },
+          { icon: <Database size={14} className="text-blue-400" />,  label: 'Public + SaaS data, live', sub: 'County assessors · Census ACS · HUD FMR · FRED' },
+          { icon: <Star    size={14} className="text-amber-400" />, label: '6 markets scored', sub: 'Phoenix · Nashville · Charlotte · Raleigh · Tampa · Austin' },
           { icon: <Shield  size={14} className="text-green-400" />, label: 'Enterprise-grade auth', sub: 'Firebase Auth · Firestore security rules' },
-          { icon: <Star    size={14} className="text-amber-400" />, label: '78 neighborhoods scored', sub: 'Full Denver choropleth — income, rent, burden' },
           { icon: <Zap     size={14} className="text-purple-400" />, label: 'Stripe billing', sub: 'Cancel anytime · No annual lock-in' },
         ].map(({ icon, label, sub }) => (
           <div key={label} className="flex items-center gap-2.5 text-sm">
@@ -287,7 +352,7 @@ function TrustStrip() {
 function HowItWorks() {
   return (
     <section id="how-it-works" className="px-6 md:px-10 py-24 max-w-5xl mx-auto">
-      <h2 className="text-3xl font-bold text-center mb-3">Cold address → signed LOI</h2>
+      <h2 className="text-3xl font-bold text-center mb-3">Scored lead → signed close</h2>
       <p className="text-gray-400 text-center mb-16">Three steps. One tab. No spreadsheets.</p>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
@@ -312,6 +377,65 @@ function HowItWorks() {
   )
 }
 
+// ── Find / Close toolkit split ──────────────────────────────────────────────
+
+function FindCloseSplit() {
+  return (
+    <section className="border-y py-24 px-6 md:px-10" style={{ borderColor: 'var(--border)', background: 'var(--bg-surface)' }}>
+      <div className="max-w-4xl mx-auto">
+        <h2 className="text-3xl font-bold text-center mb-3">The complete toolkit — both halves of the deal</h2>
+        <p className="text-gray-400 text-center mb-12">
+          Most tools do one or the other. SmartInvestorCRM is built to do both.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div
+            className="rounded-xl p-7 border"
+            style={{ borderColor: 'rgba(59,130,246,0.3)', background: 'var(--bg-card)' }}
+          >
+            <div className="flex items-center gap-2.5 mb-1.5">
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: 'rgba(59,130,246,0.09)', color: '#3b82f6' }}>
+                <Search size={18} />
+              </div>
+              <h3 className="text-xl font-bold" style={{ color: '#3b82f6' }}>Find leads</h3>
+            </div>
+            <p className="text-[13px] text-gray-500 mb-5">A scoring system that surfaces the deals worth chasing.</p>
+            <div className="flex flex-col gap-3">
+              {FIND_LIST.map(({ name, desc }) => (
+                <div key={name} className="flex items-start gap-2.5 text-sm text-gray-300">
+                  <Check size={14} className="mt-0.5 shrink-0" style={{ color: '#3b82f6' }} strokeWidth={2.5} />
+                  <span><strong className="text-white">{name}</strong> — {desc}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div
+            className="rounded-xl p-7 border"
+            style={{ borderColor: 'rgba(16,185,129,0.3)', background: 'var(--bg-card)' }}
+          >
+            <div className="flex items-center gap-2.5 mb-1.5">
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: 'rgba(16,185,129,0.09)', color: '#10b981' }}>
+                <FileText size={18} />
+              </div>
+              <h3 className="text-xl font-bold" style={{ color: '#10b981' }}>Close deals</h3>
+            </div>
+            <p className="text-[13px] text-gray-500 mb-5">Every tool between the lead and the signature.</p>
+            <div className="flex flex-col gap-3">
+              {CLOSE_LIST.map(({ name, desc }) => (
+                <div key={name} className="flex items-start gap-2.5 text-sm text-gray-300">
+                  <Check size={14} className="mt-0.5 shrink-0" style={{ color: '#10b981' }} strokeWidth={2.5} />
+                  <span><strong className="text-white">{name}</strong> — {desc}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 // ── Features ──────────────────────────────────────────────────────────────────
 
 function Features() {
@@ -319,7 +443,7 @@ function Features() {
     <section id="features" className="px-6 md:px-10 py-24 max-w-6xl mx-auto">
       <h2 className="text-3xl font-bold text-center mb-3">10 tools. One dashboard.</h2>
       <p className="text-gray-400 text-center mb-14">
-        Replace your fragmented stack — no more flipping between CoStar, Excel, Word, and Dropbox.
+        Replace your fragmented stack — no more flipping between data tools, Excel, Word, and Dropbox.
       </p>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -355,9 +479,9 @@ function DataSources() {
   return (
     <section className="border-y py-16 px-6 md:px-10" style={{ borderColor: 'var(--border)', background: 'var(--bg-surface)' }}>
       <div className="max-w-4xl mx-auto">
-        <h2 className="text-2xl font-bold text-center mb-2">Built on real, public data</h2>
+        <h2 className="text-2xl font-bold text-center mb-2">Built on real public + SaaS data</h2>
         <p className="text-gray-400 text-center text-sm mb-10">
-          Not scraped aggregators. Live pulls from government and institutional sources.
+          Not scraped aggregators. Live pulls from government, institutional, and licensed sources.
         </p>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           {DATA_SOURCES.map(({ name, desc }) => (
@@ -372,69 +496,6 @@ function DataSources() {
           ))}
         </div>
       </div>
-    </section>
-  )
-}
-
-// ── Comparison ────────────────────────────────────────────────────────────────
-
-function Comparison() {
-  const rows = [
-    { feature: 'Motivated seller leads',      us: false, them: true,  note: 'Pair with the lead-gen tool of your choice' },
-    { feature: 'Property data lookup',         us: true,  them: false, note: 'Assessor + Census live' },
-    { feature: 'Underwriting calculator',      us: true,  them: false },
-    { feature: 'Deal scoring engine',          us: true,  them: false },
-    { feature: 'LOI generator',                us: true,  them: false },
-    { feature: 'Deal pipeline (kanban)',        us: true,  them: false },
-    { feature: 'CRM (contacts + timeline)',     us: true,  them: false },
-    { feature: 'Market intel (FRED/BLS)',       us: true,  them: false },
-    { feature: 'Capital raise tracker',         us: true,  them: false },
-    { feature: 'Syndication checklist',         us: true,  them: false },
-    { feature: 'Neighborhood hotspot map',      us: true,  them: false },
-  ]
-
-  return (
-    <section className="px-6 md:px-10 py-24 max-w-4xl mx-auto">
-      <h2 className="text-3xl font-bold text-center mb-3">Where SmartInvestorCRM picks up</h2>
-      <p className="text-gray-400 text-center mb-12">
-        Lead-gen tools get you the address. SmartInvestorCRM does everything after that.
-      </p>
-
-      <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
-        <div
-          className="grid grid-cols-[1fr_auto_auto] text-xs font-semibold uppercase tracking-wider text-gray-500 px-5 py-3"
-          style={{ background: 'var(--bg-surface)' }}
-        >
-          <span>Feature</span>
-          <span className="w-32 text-center text-blue-400">SmartInvestorCRM</span>
-          <span className="w-32 text-center">Lead-Gen Tools</span>
-        </div>
-        {rows.map(({ feature, us, them, note }, i) => (
-          <div
-            key={feature}
-            className="grid grid-cols-[1fr_auto_auto] items-center px-5 py-3 text-sm border-t"
-            style={{ borderColor: 'var(--border)', background: i % 2 === 0 ? 'var(--bg-card)' : 'transparent' }}
-          >
-            <div>
-              <span className="text-gray-200">{feature}</span>
-              {note && <span className="ml-2 text-xs text-gray-600 italic">{note}</span>}
-            </div>
-            <div className="w-32 text-center">
-              {us
-                ? <span className="inline-block w-5 h-5 rounded-full bg-green-500/20 text-green-400 text-xs leading-5">✓</span>
-                : <span className="text-gray-700">—</span>}
-            </div>
-            <div className="w-32 text-center">
-              {them
-                ? <span className="inline-block w-5 h-5 rounded-full bg-green-500/20 text-green-400 text-xs leading-5">✓</span>
-                : <span className="text-gray-700">—</span>}
-            </div>
-          </div>
-        ))}
-      </div>
-      <p className="text-xs text-gray-600 text-center mt-4">
-        Pro tip: use both. Find motivated sellers with your lead-gen tool, then load the address into SmartInvestorCRM to underwrite and pipeline it.
-      </p>
     </section>
   )
 }
@@ -515,12 +576,6 @@ export function PricingGrid({ currentPlan, onUpgrade }: {
                 >
                   Current plan
                 </div>
-              ) : isFree && onUpgrade ? (
-                // Settings context (an onUpgrade handler means we're managing
-                // an existing account, not the public landing page) — no
-                // Stripe Checkout flow downgrades to free, so there's nothing
-                // actionable here for a paid subscriber.
-                null
               ) : isFree ? (
                 <Link
                   to="/sign-up"
@@ -604,10 +659,10 @@ function FinalCTA() {
       className="border-t py-20 text-center px-6"
       style={{ borderColor: 'var(--border)', background: 'var(--bg-surface)' }}
     >
-      <h2 className="text-3xl font-bold mb-4">Ready to run a tighter deal process?</h2>
+      <h2 className="text-3xl font-bold mb-4">Ready to run the whole deal in one place?</h2>
       <p className="text-gray-400 mb-8 max-w-xl mx-auto">
-        Stop switching between CoStar, Excel, Word, and your inbox. Start closing deals
-        from a single terminal-style dashboard built for serious multifamily syndicators.
+        Stop stitching together lead lists, Excel, Word, and your inbox. Find your next deal on a
+        scored map and take it all the way to a signed close — from a single terminal-style dashboard.
       </p>
       <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
         <Link

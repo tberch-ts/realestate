@@ -1,12 +1,30 @@
 import { Router } from 'express';
-import { fetchDenverHotspots } from '../providers/denverNeighborhoods.js';
+import type { MarketKey } from '@mfa/shared';
+import { fetchHotspots } from '../providers/neighborhoods.js';
+import { getMarket } from '../config/markets.js';
 
 export const hotspotsRouter = Router();
 
-// Full GeoJSON FeatureCollection for the heat-map page.
-hotspotsRouter.get('/denver', async (_req, res, next) => {
+// Full GeoJSON FeatureCollection for the heat-map page, generalized off
+// markets.ts (was Denver-only `/denver`). `/denver` and `/denver/ranked`
+// stay as aliases below so nothing already deployed breaks.
+hotspotsRouter.get('/:market', async (req, res, next) => {
   try {
-    const result = await fetchDenverHotspots();
+    const market = req.params.market as MarketKey;
+    const cfg = getMarket(market);
+    if (!cfg) {
+      return res.status(404).json({ provider: 'hotspots', status: 'not_available', message: `Unknown market '${market}'` });
+    }
+    if (!cfg.neighborhoodsSupported) {
+      return res.status(200).json({
+        provider: 'hotspots',
+        status: 'not_available',
+        message: cfg.notes
+          ? `Hotspots aren't available for ${cfg.label} yet — ${cfg.notes}`
+          : `Hotspots aren't available for ${cfg.label} yet.`,
+      });
+    }
+    const result = await fetchHotspots(market);
     if (result.status !== 'ok' || !result.data) {
       return res.status(502).json(result);
     }
@@ -20,11 +38,26 @@ hotspotsRouter.get('/denver', async (_req, res, next) => {
 // Lightweight ranked list — used by the homepage "Hot Zones" strip.
 // Returns just { name, score, centroid, metrics } per neighborhood,
 // sorted by score desc. No polygons, small payload.
-hotspotsRouter.get('/denver/ranked', async (req, res, next) => {
+hotspotsRouter.get('/:market/ranked', async (req, res, next) => {
   try {
+    const market = req.params.market as MarketKey;
+    const cfg = getMarket(market);
+    if (!cfg) {
+      return res.status(404).json({ provider: 'hotspots', status: 'not_available', message: `Unknown market '${market}'` });
+    }
+    if (!cfg.neighborhoodsSupported) {
+      return res.status(200).json({
+        provider: 'hotspots',
+        status: 'not_available',
+        message: cfg.notes
+          ? `Hotspots aren't available for ${cfg.label} yet — ${cfg.notes}`
+          : `Hotspots aren't available for ${cfg.label} yet.`,
+        data: [],
+      });
+    }
     const limit = Math.min(Number(req.query.limit ?? 10), 50);
     const minScore = Number(req.query.minScore ?? 0);
-    const result = await fetchDenverHotspots();
+    const result = await fetchHotspots(market);
     if (result.status !== 'ok' || !result.data) {
       return res.status(502).json(result);
     }
@@ -43,8 +76,13 @@ hotspotsRouter.get('/denver/ranked', async (req, res, next) => {
       .slice(0, limit);
 
     res.setHeader('Cache-Control', 'public, max-age=3600');
-    res.json({ provider: 'denver_hotspots', status: 'ok', data: ranked });
+    res.json({ provider: `${market}_hotspots`, status: 'ok', data: ranked });
   } catch (err) {
     next(err);
   }
 });
+
+// Note: no separate `/denver` alias needed — `/:market` and
+// `/:market/ranked` above already match `/denver` and `/denver/ranked`
+// with `market === 'denver'`, so every pre-multi-market caller keeps
+// working unchanged.

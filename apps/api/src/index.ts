@@ -25,8 +25,9 @@ import { billingRouter } from './routes/billing.js';
 import { invoicesRouter } from './routes/invoices.js';
 import { terminalRouter } from './routes/terminal.js';
 import { connectRouter } from './routes/connect.js';
-import { warmDenverHotspots } from './providers/denverNeighborhoods.js';
+import { warmHotspots } from './providers/neighborhoods.js';
 import { warmDenverPortfolio } from './providers/denverPortfolio.js';
+import { supportedNeighborhoodMarkets } from './config/markets.js';
 
 const app = express();
 
@@ -128,7 +129,15 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 const port = Number(process.env.API_PORT ?? 4000);
 app.listen(port, () => {
   console.log(`[api] listening on :${port}`);
-  // Warm Denver hotspots + portfolio in background so first user request is served from cache.
-  setTimeout(() => warmDenverHotspots(), 500);
-  setTimeout(() => warmDenverPortfolio(), 1500);
+  // Warm every neighborhoodsSupported market's hotspots cache in the
+  // background so first user request is served from cache. Staggered so
+  // they don't all hit api.census.gov in the same instant (each market's
+  // own neighborhoods are still scored one-at-a-time internally — see
+  // neighborhoods.ts).
+  supportedNeighborhoodMarkets().forEach((m, i) => {
+    setTimeout(() => warmHotspots(m.key), 500 + i * 2000);
+  });
+  // Portfolio warm-up stays Denver-only until another market's bulk
+  // parcel source is real (see portfolioDispatcher.ts).
+  setTimeout(() => warmDenverPortfolio(), 500 + supportedNeighborhoodMarkets().length * 2000 + 1000);
 });
