@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { addDoc, collection, onSnapshot, query, serverTimestamp, where } from 'firebase/firestore'
+import { addDoc, collection, onSnapshot, orderBy, query, serverTimestamp, where } from 'firebase/firestore'
 import { Plus } from 'lucide-react'
 import { db } from '../lib/firebase'
 import { useAuth } from '../context/AuthContext'
@@ -15,8 +15,9 @@ export default function Deals() {
 
   useEffect(() => {
     if (!user) return
-    return onSnapshot(query(collection(db, 'deals'), where('userId', '==', user.uid)), (snap) =>
-      setDeals(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Deal))
+    return onSnapshot(
+      query(collection(db, 'deals'), where('ownerId', '==', user.uid), orderBy('updatedAt', 'desc')),
+      (snap) => setDeals(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Deal))
     )
   }, [user])
 
@@ -26,7 +27,8 @@ export default function Deals() {
     setBusy(true)
     try {
       await addDoc(collection(db, 'deals'), {
-        userId: user.uid,
+        ownerId: user.uid,
+        members: [],
         address: address.trim(),
         status: 'sourcing',
         createdAt: serverTimestamp(),

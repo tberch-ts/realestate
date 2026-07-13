@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
 import { loadGoogleMaps } from '../lib/googleMaps';
 import { API_URL as API_BASE, GOOGLE_MAPS_API_KEY as MAPS_KEY } from '../lib/runtimeEnv';
@@ -121,6 +122,12 @@ export default function Hotspots() {
                 <Row k="Population (tract)" v={fmtNum(selected.population)} />
                 <Row k="Rent-burdened 50%+" v={fmtNum(selected.rentBurdenedPct)} />
               </dl>
+              <Link
+                to={`/app/followup?zone=${encodeURIComponent(selected.name)}`}
+                className="mt-3 inline-block text-xs text-blue-400 hover:text-blue-300"
+              >
+                Follow-up candidates in this zone →
+              </Link>
             </div>
           )}
           {!selected && status === 'ready' && (
@@ -164,19 +171,19 @@ function Row({ k, v }: { k: string; v: string | undefined }) {
 }
 
 function colorForScore(score: number): string {
-  if (score >= 90) return '#10b981';
-  if (score >= 80) return '#84cc16';
-  if (score >= 60) return '#f59e0b';
-  if (score >= 40) return '#fb923c';
-  return '#64748b';
+  if (score >= 90) return '#ef4444';
+  if (score >= 80) return '#f97316';
+  if (score >= 60) return '#eab308';
+  if (score >= 40) return '#38bdf8';
+  return '#3b82f6';
 }
 
 function scoreTextColor(score: number): string {
-  if (score >= 90) return 'text-emerald-300';
-  if (score >= 80) return 'text-lime-300';
-  if (score >= 60) return 'text-amber-200';
-  if (score >= 40) return 'text-orange-300';
-  return 'text-gray-400';
+  if (score >= 90) return 'text-red-400';
+  if (score >= 80) return 'text-orange-400';
+  if (score >= 60) return 'text-yellow-400';
+  if (score >= 40) return 'text-sky-400';
+  return 'text-blue-400';
 }
 
 function toNum(v: unknown): number | undefined {

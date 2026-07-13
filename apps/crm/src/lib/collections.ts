@@ -1,6 +1,8 @@
 // Firestore document shapes + typed collection refs for the SmartInvestorCRM
-// dashboard. Every doc carries `userId` (set once at creation, never changed)
-// so firestore.rules can enforce per-user isolation.
+// dashboard. Every doc carries `ownerId` (set once at creation, never
+// changed) so firestore.rules can enforce per-user isolation — this matches
+// the field name used by the original production Firestore schema (verified
+// directly against the deployed rules/indexes, not guessed).
 
 // Stored at users/{uid} — created at sign-up (see SignUp.tsx), extended here
 // with the PostGrid sender/return address used on outgoing postal mail.
@@ -14,8 +16,9 @@ export interface PostgridSender {
 }
 
 export interface UserProfile {
+  uid?: string
   email?: string
-  plan?: string
+  displayName?: string
   createdAt?: unknown
   postgridSender?: PostgridSender
 }
@@ -34,7 +37,11 @@ export const DEAL_STATUS_LABELS: Record<DealStatus, string> = {
 
 export interface Deal {
   id: string
-  userId: string
+  ownerId: string
+  // Other signed-in users who can view/edit (not delete) this deal. Schema-
+  // compatible with the real app's team-sharing model; no invite UI exists
+  // yet to actually populate this beyond an empty array.
+  members?: string[]
   address: string
   units?: number
   price?: number
@@ -50,7 +57,7 @@ export type ContactKind = (typeof CONTACT_KINDS)[number]
 
 export interface Contact {
   id: string
-  userId: string
+  ownerId: string
   name: string
   kind: ContactKind
   firmName?: string
@@ -79,12 +86,12 @@ export const INTERACTION_KIND_LABELS: Record<InteractionKind, string> = {
   reply_received: 'Reply received',
 }
 
-// Stored at contacts/{contactId}/interactions/{id}. userId is denormalized
+// Stored at contacts/{contactId}/interactions/{id}. ownerId is denormalized
 // (not just inherited from the parent contact) so firestore.rules can check
 // ownership directly on the subcollection doc.
 export interface Interaction {
   id: string
-  userId: string
+  ownerId: string
   kind: InteractionKind
   subject?: string
   body?: string
@@ -98,7 +105,8 @@ export interface Interaction {
 // when hitting /api/loi or /api/postgrid/letters/inline.
 export interface Loi {
   id: string
-  userId: string
+  ownerId: string
+  members?: string[]
 
   // Deal-level (subset renderLoiPdf actually reads)
   address: string

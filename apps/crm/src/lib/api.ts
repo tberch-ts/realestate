@@ -1,4 +1,6 @@
-import type { DealInput, LoiInput, PropertySnapshot } from '@mfa/shared';
+import type {
+  DealInput, FollowupResult, LoiInput, OwnerCluster, PropertySnapshot, SosEntity,
+} from '@mfa/shared';
 import { API_URL as BASE } from './runtimeEnv';
 import { auth } from './firebase';
 
@@ -24,6 +26,30 @@ export async function apiFetch(input: string | URL, init?: RequestInit): Promise
   return fetch(input, { ...init, headers });
 }
 
+// ---- Billing (Stripe) ----
+
+export async function createCheckoutSession(plan: 'pro' | 'team'): Promise<{ url: string }> {
+  const res = await apiFetch(`${BASE}/api/billing/checkout-session`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ plan }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.message ?? `API ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function createPortalSession(): Promise<{ url: string }> {
+  const res = await apiFetch(`${BASE}/api/billing/portal-session`, { method: 'POST' });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.message ?? `API ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function fetchProperty(address: string): Promise<PropertySnapshot> {
   const url = new URL(`${BASE}/api/property`, typeof window !== 'undefined' ? window.location.origin : undefined);
   url.searchParams.set('address', address);
@@ -40,6 +66,117 @@ export async function downloadLoiPdf(deal: DealInput, loi: LoiInput): Promise<Bl
   });
   if (!res.ok) throw new Error(`API ${res.status}`);
   return res.blob();
+}
+
+// ---- Portfolio (city-wide ownership) ----
+
+export async function fetchOwners(opts: {
+  outOfState?: boolean;
+  search?: string;
+  limit?: number;
+} = {}): Promise<OwnerCluster[]> {
+  const url = new URL(`${BASE}/api/portfolio/denver/owners`, typeof window !== 'undefined' ? window.location.origin : undefined);
+  if (opts.outOfState) url.searchParams.set('outOfState', '1');
+  if (opts.search) url.searchParams.set('search', opts.search);
+  if (opts.limit) url.searchParams.set('limit', String(opts.limit));
+  const res = await apiFetch(url);
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  const body = await res.json();
+  return body.data.clusters as OwnerCluster[];
+}
+
+export async function fetchOwner(name: string): Promise<OwnerCluster> {
+  const url = new URL(`${BASE}/api/portfolio/denver/owner`, typeof window !== 'undefined' ? window.location.origin : undefined);
+  url.searchParams.set('name', name);
+  const res = await apiFetch(url);
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  const body = await res.json();
+  return body.data as OwnerCluster;
+}
+
+export async function fetchSosEntity(name: string): Promise<SosEntity | null> {
+  const url = new URL(`${BASE}/api/sos/entity`, typeof window !== 'undefined' ? window.location.origin : undefined);
+  url.searchParams.set('name', name);
+  const res = await apiFetch(url);
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  const body = await res.json();
+  return body.data as SosEntity | null;
+}
+
+// ---- Follow-up ----
+
+export async function fetchFollowup(
+  zone: string,
+  opts: { minUnits?: number; minYear?: number; limit?: number } = {}
+): Promise<FollowupResult> {
+  const url = new URL(`${BASE}/api/followup/denver`, typeof window !== 'undefined' ? window.location.origin : undefined);
+  url.searchParams.set('zone', zone);
+  if (opts.minUnits) url.searchParams.set('minUnits', String(opts.minUnits));
+  if (opts.minYear) url.searchParams.set('minYear', String(opts.minYear));
+  if (opts.limit) url.searchParams.set('limit', String(opts.limit));
+  const res = await apiFetch(url);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`API ${res.status}: ${text.slice(0, 120)}`);
+  }
+  const body = await res.json();
+  return body.data as FollowupResult;
+}
+
+// ---- SEC EDGAR Form D ----
+
+export interface FormDSummary {
+  accessionNumber: string;
+  cik: string;
+  filingDate: string;
+  form: string;
+  issuerName: string;
+  issuerState?: string;
+  issuerLocation?: string;
+  incState?: string;
+}
+
+export interface FormDDetail extends FormDSummary {
+  issuerAddress?: { street1?: string; street2?: string; city?: string; state?: string; zip?: string };
+  issuerPhone?: string;
+  entityType?: string;
+  jurisdictionOfInc?: string;
+  industryGroupType?: string;
+  totalOfferingAmount?: string;
+  totalAmountSold?: number;
+  totalRemaining?: string;
+  minimumInvestment?: number;
+  investorCount?: number;
+  hasNonAccreditedInvestors?: boolean;
+  dateOfFirstSale?: string;
+  relatedPersons?: Array<{
+    name: string;
+    relationship: string[];
+    clarification?: string;
+    address?: { city?: string; state?: string; zip?: string };
+  }>;
+}
+
+export async function listFormDFilings(opts: {
+  state?: string; keyword?: string; dateFrom?: string; dateTo?: string; limit?: number;
+} = {}): Promise<FormDSummary[]> {
+  const url = new URL(`${BASE}/api/filings/form-d`, typeof window !== 'undefined' ? window.location.origin : undefined);
+  if (opts.state)    url.searchParams.set('state', opts.state);
+  if (opts.keyword)  url.searchParams.set('keyword', opts.keyword);
+  if (opts.dateFrom) url.searchParams.set('dateFrom', opts.dateFrom);
+  if (opts.dateTo)   url.searchParams.set('dateTo', opts.dateTo);
+  if (opts.limit)    url.searchParams.set('limit', String(opts.limit));
+  const res = await apiFetch(url);
+  if (!res.ok) throw new Error(`filings list: ${res.status}`);
+  return (await res.json()).data as FormDSummary[];
+}
+
+export async function getFormDFiling(accession: string, cik: string): Promise<FormDDetail> {
+  const url = new URL(`${BASE}/api/filings/form-d/${encodeURIComponent(accession)}`, typeof window !== 'undefined' ? window.location.origin : undefined);
+  url.searchParams.set('cik', cik);
+  const res = await apiFetch(url);
+  if (!res.ok) throw new Error(`filing detail: ${res.status}`);
+  return (await res.json()).data as FormDDetail;
 }
 
 export async function sendPostgridLetter(input: {

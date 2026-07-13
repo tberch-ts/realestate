@@ -1,7 +1,8 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import {
   Building2, LayoutDashboard, Kanban, Search, Users, FileText,
-  MapPin, TrendingUp, DollarSign, GraduationCap, Settings as SettingsIcon, LogOut,
+  MapPin, Layers, FileSearch, BookOpen,
+  TrendingUp, DollarSign, GraduationCap, Settings as SettingsIcon, LogOut,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
@@ -12,6 +13,9 @@ const NAV = [
   { to: '/app/contacts', icon: Users, label: 'Contacts' },
   { to: '/app/loi', icon: FileText, label: 'LOIs' },
   { to: '/app/hotspots', icon: MapPin, label: 'Hotspots' },
+  { to: '/app/portfolio', icon: Layers, label: 'Portfolio' },
+  { to: '/app/filings', icon: FileSearch, label: 'Filings' },
+  { to: '/app/playbook', icon: BookOpen, label: 'Playbook' },
   { to: '/app/market', icon: TrendingUp, label: 'Market Intel' },
   { to: '/app/capital', icon: DollarSign, label: 'Capital Raise' },
   { to: '/app/learn', icon: GraduationCap, label: 'Learn' },

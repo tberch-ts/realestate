@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc, where,
 } from 'firebase/firestore'
@@ -15,20 +16,21 @@ const LABEL = 'text-xs text-gray-500 block mb-1'
 
 export default function Loi() {
   const { user } = useAuth()
+  const [params] = useSearchParams()
   const [lois, setLois] = useState<LoiRecord[]>([])
   const [contacts, setContacts] = useState<Contact[]>([])
   const [sender, setSender] = useState<UserProfile['postgridSender']>()
-  const [showForm, setShowForm] = useState(false)
-  const [address, setAddress] = useState('')
+  const [showForm, setShowForm] = useState(!!params.get('address'))
+  const [address, setAddress] = useState(params.get('address') ?? '')
   const [busy, setBusy] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!user) return
-    const unsubLois = onSnapshot(query(collection(db, 'lois'), where('userId', '==', user.uid)), (snap) =>
+    const unsubLois = onSnapshot(query(collection(db, 'lois'), where('ownerId', '==', user.uid)), (snap) =>
       setLois(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LoiRecord))
     )
-    const unsubContacts = onSnapshot(query(collection(db, 'contacts'), where('userId', '==', user.uid)), (snap) =>
+    const unsubContacts = onSnapshot(query(collection(db, 'contacts'), where('ownerId', '==', user.uid)), (snap) =>
       setContacts(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Contact))
     )
     const unsubUser = onSnapshot(doc(db, 'users', user.uid), (snap) => setSender((snap.data() as UserProfile | undefined)?.postgridSender))
@@ -44,9 +46,12 @@ export default function Loi() {
     if (!user || !address.trim()) return
     setBusy(true)
     try {
+      const unitsParam = params.get('units')
       const ref = await addDoc(collection(db, 'lois'), {
-        userId: user.uid,
+        ownerId: user.uid,
+        members: [],
         address: address.trim(),
+        ...(unitsParam ? { units: Number(unitsParam) } : {}),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
@@ -239,7 +244,7 @@ function LoiEditor({ loi, contacts, sender }: { loi: LoiRecord; contacts: Contac
       await patch('mailedAt', serverTimestamp())
       if (loi.contactId) {
         await addDoc(collection(db, 'contacts', loi.contactId, 'interactions'), {
-          userId: loi.userId,
+          ownerId: loi.ownerId,
           kind: 'outreach_sent',
           subject: `LOI mailed for ${loi.address}`,
           body: `Sent via PostGrid (${result.live ? 'LIVE' : 'TEST'}). Letter ID: ${result.id}. Status: ${result.status}.`,

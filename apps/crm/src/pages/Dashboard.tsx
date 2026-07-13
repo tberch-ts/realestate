@@ -14,13 +14,13 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!user) return
-    const unsubDeals = onSnapshot(query(collection(db, 'deals'), where('userId', '==', user.uid)), (snap) =>
+    const unsubDeals = onSnapshot(query(collection(db, 'deals'), where('ownerId', '==', user.uid)), (snap) =>
       setDeals(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Deal))
     )
-    const unsubContacts = onSnapshot(query(collection(db, 'contacts'), where('userId', '==', user.uid)), (snap) =>
+    const unsubContacts = onSnapshot(query(collection(db, 'contacts'), where('ownerId', '==', user.uid)), (snap) =>
       setContacts(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Contact))
     )
-    const unsubLois = onSnapshot(query(collection(db, 'lois'), where('userId', '==', user.uid)), (snap) =>
+    const unsubLois = onSnapshot(query(collection(db, 'lois'), where('ownerId', '==', user.uid)), (snap) =>
       setLois(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Loi))
     )
     return () => {
@@ -32,9 +32,13 @@ export default function Dashboard() {
 
   const activeDeals = deals.filter((d) => d.status !== 'closed')
 
+  const hour = new Date().getHours()
+  const timeGreeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
+  const firstName = user?.displayName?.trim().split(/\s+/)[0]
+
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-1">Welcome back{user?.displayName ? `, ${user.displayName}` : ''}</h1>
+      <h1 className="text-2xl font-bold mb-1">{timeGreeting}{firstName ? `, ${firstName}` : ''}</h1>
       <p className="text-sm text-gray-500 mb-8">Here's where your pipeline stands.</p>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">

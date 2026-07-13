@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
-  addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc,
+  addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where,
 } from 'firebase/firestore'
 import { Mail, Send, Trash2 } from 'lucide-react'
 import { db } from '../lib/firebase'
@@ -37,11 +37,12 @@ export default function ContactDetail() {
   }, [id])
 
   useEffect(() => {
-    if (!id) return
-    return onSnapshot(query(collection(db, 'contacts', id, 'interactions'), orderBy('occurredAt', 'desc')), (snap) =>
-      setInteractions(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Interaction))
+    if (!id || !user) return
+    return onSnapshot(
+      query(collection(db, 'contacts', id, 'interactions'), where('ownerId', '==', user.uid), orderBy('occurredAt', 'desc')),
+      (snap) => setInteractions(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Interaction))
     )
-  }, [id])
+  }, [id, user])
 
   useEffect(() => {
     if (!user) return
@@ -60,11 +61,11 @@ export default function ContactDetail() {
     navigate('/app/contacts')
   }
 
-  async function logInteraction(input: Omit<Interaction, 'id' | 'userId' | 'createdAt'>) {
+  async function logInteraction(input: Omit<Interaction, 'id' | 'ownerId' | 'createdAt'>) {
     if (!id || !contact) return
     await addDoc(collection(db, 'contacts', id, 'interactions'), {
       ...input,
-      userId: contact.userId,
+      ownerId: contact.ownerId,
       occurredAt: input.occurredAt ?? serverTimestamp(),
       createdAt: serverTimestamp(),
     })
@@ -143,7 +144,7 @@ function OutreachComposer({
 }: {
   contact: Contact
   sender: UserProfile['postgridSender']
-  onLogged: (input: Omit<Interaction, 'id' | 'userId' | 'createdAt'>) => Promise<void>
+  onLogged: (input: Omit<Interaction, 'id' | 'ownerId' | 'createdAt'>) => Promise<void>
 }) {
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
@@ -230,7 +231,7 @@ function OutreachComposer({
   )
 }
 
-function ManualLogForm({ onLog }: { onLog: (input: Omit<Interaction, 'id' | 'userId' | 'createdAt'>) => Promise<void> }) {
+function ManualLogForm({ onLog }: { onLog: (input: Omit<Interaction, 'id' | 'ownerId' | 'createdAt'>) => Promise<void> }) {
   const [kind, setKind] = useState<Interaction['kind']>('note')
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')

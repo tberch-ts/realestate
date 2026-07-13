@@ -8,7 +8,12 @@ interface RuntimeEnv {
 }
 
 function read(): RuntimeEnv {
-  const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:4000';
+  // Production builds must default to the real API — GitHub Pages has no
+  // build-time secrets, so a build made without a local .env would otherwise
+  // silently ship pointing at the builder's own localhost (see incident:
+  // this shipped broken for every real visitor until caught in QA).
+  const API_URL = (import.meta.env.VITE_API_URL as string | undefined)
+    ?? (import.meta.env.DEV ? 'http://localhost:4000' : 'https://mfa-api.fly.dev');
   const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
   return { API_URL, GOOGLE_MAPS_API_KEY };
 }
