@@ -113,7 +113,10 @@ export default function ContactDetail() {
         <textarea rows={3} className={INPUT} style={bd} defaultValue={contact.notes ?? ''} onBlur={(e) => handleChange('notes', e.target.value)} />
       </Section>
 
-      <OutreachComposer contact={contact} sender={sender} onLogged={logInteraction} />
+      {/* Keyed on contact id so the greeting/subject re-derive fresh per
+          contact instead of carrying over a stale draft if the route param
+          changes without a full remount. */}
+      <OutreachComposer key={contact.id} contact={contact} sender={sender} onLogged={logInteraction} />
 
       <ManualLogForm onLog={logInteraction} />
 
@@ -146,8 +149,14 @@ function OutreachComposer({
   sender: UserProfile['postgridSender']
   onLogged: (input: Omit<Interaction, 'id' | 'ownerId' | 'createdAt'>) => Promise<void>
 }) {
-  const [subject, setSubject] = useState('')
-  const [body, setBody] = useState('')
+  // Greet the contact by name and drop the firm into the subject line by
+  // default — the message text itself is still up to the user, but they
+  // shouldn't have to retype who they're writing to.
+  const [subject, setSubject] = useState(() => `Reaching out — ${contact.firmName || contact.name}`)
+  const [body, setBody] = useState(() => {
+    const firstName = contact.kind === 'firm' ? contact.name : contact.name.trim().split(/\s+/)[0]
+    return `Hi ${firstName},\n\n`
+  })
   const [sendingMail, setSendingMail] = useState(false)
   const [mailError, setMailError] = useState<string | null>(null)
 

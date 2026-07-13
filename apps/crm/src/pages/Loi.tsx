@@ -14,6 +14,15 @@ import type { Contact, UserProfile } from '../lib/collections'
 const INPUT = 'w-full rounded-lg border px-3 py-2 text-sm bg-transparent'
 const LABEL = 'text-xs text-gray-500 block mb-1'
 
+function formatMailingAddress(a?: { addressLine1?: string; addressLine2?: string; city?: string; stateCode?: string; zip?: string }) {
+  if (!a?.addressLine1) return undefined
+  return [a.addressLine1, a.addressLine2, [a.city, a.stateCode].filter(Boolean).join(', '), a.zip].filter(Boolean).join(', ')
+}
+
+function compact<T extends object>(obj: T): Partial<T> {
+  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined && v !== '')) as Partial<T>
+}
+
 export default function Loi() {
   const { user } = useAuth()
   const [params] = useSearchParams()
@@ -47,11 +56,21 @@ export default function Loi() {
     setBusy(true)
     try {
       const unitsParam = params.get('units')
+      // We're almost always the buyer on a new LOI — carry over the sender
+      // profile from Settings and the signed-in user instead of making them
+      // retype their own company's info on every deal.
+      const buyerFromProfile = compact({
+        buyerEntity: sender?.companyName,
+        buyerContact: user.displayName ?? undefined,
+        buyerEmail: user.email ?? undefined,
+        buyerAddress: formatMailingAddress(sender),
+      })
       const ref = await addDoc(collection(db, 'lois'), {
         ownerId: user.uid,
         members: [],
         address: address.trim(),
         ...(unitsParam ? { units: Number(unitsParam) } : {}),
+        ...buyerFromProfile,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
@@ -150,6 +169,24 @@ function LoiEditor({ loi, contacts, sender }: { loi: LoiRecord; contacts: Contac
       if (kind === 'array') return patch(field, raw.split('\n').map((s) => s.trim()).filter(Boolean))
       patch(field, raw)
     }
+  }
+
+  function handleContactLink(e: React.ChangeEvent<HTMLSelectElement>) {
+    const contactId = e.target.value || undefined
+    patch('contactId', contactId)
+    if (!contactId) return
+    const c = contacts.find((x) => x.id === contactId)
+    if (!c) return
+    // Pull seller entity/contact/address straight from the linked contact
+    // (same buyer-vs-firm convention used for PostGrid mail below) instead
+    // of leaving the user to retype data already in their contact book.
+    const isFirm = c.kind === 'firm'
+    const updates = compact({
+      sellerEntity: loi.sellerEntity ? undefined : (isFirm ? c.name : c.firmName || c.name),
+      sellerContact: loi.sellerContact ? undefined : (isFirm ? undefined : c.name),
+      sellerAddress: loi.sellerAddress ? undefined : formatMailingAddress(c),
+    })
+    if (Object.keys(updates).length) updateDoc(doc(db, 'lois', loi.id), { ...updates, updatedAt: serverTimestamp() })
   }
 
   function buildDealInput(): DealInput {
@@ -271,7 +308,7 @@ function LoiEditor({ loi, contacts, sender }: { loi: LoiRecord; contacts: Contac
             </select>
           </Field>
           <Field label="Link to contact (seller)">
-            <select className={INPUT} style={bd} defaultValue={loi.contactId ?? ''} onChange={(e) => patch('contactId', e.target.value || undefined)}>
+            <select className={INPUT} style={bd} defaultValue={loi.contactId ?? ''} onChange={handleContactLink}>
               <option value="" className="bg-slate-900">—</option>
               {contacts.map((c) => <option key={c.id} value={c.id} className="bg-slate-900">{c.name}</option>)}
             </select>
@@ -293,7 +330,9 @@ function LoiEditor({ loi, contacts, sender }: { loi: LoiRecord; contacts: Contac
         <Field label="Address"><input className={INPUT} style={bd} defaultValue={loi.buyerAddress ?? ''} onBlur={patchOnBlur('buyerAddress')} /></Field>
       </Section>
 
-      <Section title="Seller">
+      {/* Keyed on contactId so these uncontrolled fields re-initialize from
+          the freshly-autofilled Firestore doc when a contact gets linked. */}
+      <Section title="Seller" key={loi.contactId ?? 'none'}>
         <Grid cols={2}>
           <Field label="Entity *"><input className={INPUT} style={bd} defaultValue={loi.sellerEntity ?? ''} onBlur={patchOnBlur('sellerEntity')} /></Field>
           <Field label="Contact"><input className={INPUT} style={bd} defaultValue={loi.sellerContact ?? ''} onBlur={patchOnBlur('sellerContact')} /></Field>

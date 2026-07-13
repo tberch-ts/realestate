@@ -12,6 +12,7 @@ import {
   deleteDraft,
   downloadLoi,
   fetchDeal,
+  fetchProperty,
   loadDraft,
   mailLoi,
   updateDraft,
@@ -118,10 +119,24 @@ export default function Loi() {
             purchasePrice: 0,
             assetClass: 'unknown' as AssetClass,
           };
+          let loiSeed = loi;
+          // Best-effort: the assessor record for this address was already
+          // looked up on the property/hotspots page — reuse its owner name
+          // and last sale price instead of leaving the seller/price blank.
+          try {
+            const snap = await fetchProperty(addressParam);
+            const a = snap.assessor.status === 'ok' ? snap.assessor.data : undefined;
+            if (a?.owner) loiSeed = { ...loiSeed, sellerEntity: a.owner };
+            if (a?.lastSalePrice) ctx.purchasePrice = a.lastSalePrice;
+          } catch {
+            // Assessor lookup is a nice-to-have here, not required to start a draft.
+          }
+          if (cancelled) return;
           setDealContext(ctx);
+          if (loiSeed !== loi) setLoi(loiSeed);
           const created = await createDraft({
             address: addressParam,
-            loi,
+            loi: loiSeed,
             dealContext: ctx,
           }).catch(() => null);
           if (cancelled) return;
