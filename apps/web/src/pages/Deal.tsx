@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import type { DealInput, UnderwritingOutput } from '@mfa/shared';
-import { previewUnderwriting, saveDeal } from '../lib/api';
+import { fetchProperty, previewUnderwriting, saveDeal } from '../lib/api';
 import UnderwritingForm from '../components/UnderwritingForm';
 import UnderwritingResults from '../components/UnderwritingResults';
 
@@ -39,6 +39,29 @@ export default function Deal() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<{ id: number } | null>(null);
+
+  // We already looked this address up (hotspots/property search) to get
+  // here — carry over the assessor's unit count and last sale price instead
+  // of making the user re-enter numbers the county already told us.
+  useEffect(() => {
+    if (!addressFromQuery) return;
+    fetchProperty(addressFromQuery)
+      .then((snap) => {
+        const a = snap.assessor.status === 'ok' ? snap.assessor.data : undefined;
+        if (!a) return;
+        setDeal((d) => ({
+          ...d,
+          underwriting: {
+            ...d.underwriting,
+            units: d.underwriting.units || a.units || d.underwriting.units,
+            purchasePrice: d.underwriting.purchasePrice || a.lastSalePrice || d.underwriting.purchasePrice,
+          },
+        }));
+      })
+      .catch(() => {});
+    // Only run for the address we landed on — not on every keystroke edit to deal.address.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addressFromQuery]);
 
   // Debounced live preview
   const u = deal.underwriting;
