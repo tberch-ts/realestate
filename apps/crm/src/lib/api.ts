@@ -179,6 +179,35 @@ export async function getFormDFiling(accession: string, cik: string): Promise<Fo
   return (await res.json()).data as FormDDetail;
 }
 
+// ---- Market Intel ----
+
+export interface MarketCompareRow {
+  name: string;
+  state: string;
+  population?: number;
+  medianIncome?: number;
+  medianRent?: number;
+  rentBurdenedPct?: number;
+  rentToIncomeRatio?: number;
+  violentCrimeRate?: number;
+  crimeYear?: number;
+  crimeJurisdiction?: string;
+  landlordScore: number;
+  landlordTier: 'friendly' | 'moderate' | 'unfriendly';
+  landlordNotes?: string;
+  similarityToDenver?: number;
+  investability?: number;
+  errors?: string[];
+}
+
+export async function fetchMarketsCompare(opts: { force?: boolean } = {}): Promise<MarketCompareRow[]> {
+  const url = new URL(`${BASE}/api/markets/compare`, typeof window !== 'undefined' ? window.location.origin : undefined);
+  if (opts.force) url.searchParams.set('force', '1');
+  const res = await apiFetch(url);
+  if (!res.ok) throw new Error(`markets compare: ${res.status}`);
+  return (await res.json()).data.markets as MarketCompareRow[];
+}
+
 export async function sendPostgridLetter(input: {
   to: PostGridAddress;
   from: PostGridAddress;

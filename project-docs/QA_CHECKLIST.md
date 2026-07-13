@@ -92,6 +92,21 @@ this PR, never verified live.
 - [ ] "Jump to stage" anchor links scroll correctly
 - [ ] CTA links (hotspots, property search, LOI, capital, followup, deals) all resolve
 
+## Market Intel (`/app/market`) — new page
+
+- [ ] Table loads 20 metros ranked by investability, Denver row highlighted as baseline
+- [ ] Column sorting (investability, similarity, population, income, rent, crime) works both directions
+- [ ] Refresh button re-fetches with `force=1` and updates the table
+- [ ] Metros missing FBI/Census data show "partial data" rather than crashing the row
+
+## Capital Raise (`/app/capital`, `/app/capital/:id`) — new page
+
+- [ ] Create a raise, confirm it appears in the list
+- [ ] List sorts by `updatedAt desc`
+- [ ] Progress bar reflects raised/target amount correctly (and doesn't break when target is unset)
+- [ ] Detail page edits (status, amounts, close date, notes) save and reflect immediately
+- [ ] Delete removes the raise and returns to the list
+
 ## Cross-cutting / security
 
 - [ ] Sign in as two different users, confirm neither can see the other's deals/contacts/LOIs (Firestore rules isolation, not just a UI hide)
@@ -100,6 +115,6 @@ this PR, never verified live.
 
 ## Known not-yet-built (don't file these as bugs)
 
-- Market Intel, Capital Raise, Learn, Settings/Billing are `ComingSoon` placeholders, not broken pages
+- Learn, Settings/Billing are `ComingSoon` placeholders, not broken pages
 - No invite UI for adding a `members` teammate to a deal/LOI — the field and rules exist, but only reachable by hand-editing Firestore for now
 - No standalone underwriting calculator (apps/web's `/deal` page) in apps/crm — Playbook's old CTA for that now points at the Deal Board instead

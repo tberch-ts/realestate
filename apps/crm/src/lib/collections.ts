@@ -59,6 +59,36 @@ export interface Deal {
   updatedAt?: unknown
 }
 
+export const CAPITAL_RAISE_STATUSES = ['planning', 'open', 'funded', 'closed'] as const
+export type CapitalRaiseStatus = (typeof CAPITAL_RAISE_STATUSES)[number]
+
+export const CAPITAL_RAISE_STATUS_LABELS: Record<CapitalRaiseStatus, string> = {
+  planning: 'Planning',
+  open: 'Open',
+  funded: 'Funded',
+  closed: 'Closed',
+}
+
+// Stored at capital_raises/{raiseId}. Tracks an equity raise (from LPs) for a
+// deal — separate from `Deal` since not every deal needs outside capital, and
+// a raise can span/outlive a single deal's own status field. Same ownerId +
+// members team-sharing pattern as deals/lois (see firestore.rules).
+export interface CapitalRaise {
+  id: string
+  ownerId: string
+  members?: string[]
+  dealName: string
+  address?: string
+  targetAmount?: number
+  raisedAmount?: number
+  minInvestment?: number
+  status: CapitalRaiseStatus
+  targetCloseDate?: string
+  notes?: string
+  createdAt?: unknown
+  updatedAt?: unknown
+}
+
 export const CONTACT_KINDS = ['broker', 'seller', 'investor', 'firm', 'other'] as const
 export type ContactKind = (typeof CONTACT_KINDS)[number]
 
