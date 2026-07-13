@@ -27,7 +27,7 @@
 |---|---|---|---|---|---|---|---|
 | Denver | CO | Denver | ok | ok | ok | ok | ok |
 | Phoenix | AZ | Maricopa | ok | not_available | deferred | deferred | deferred |
-| Austin | TX | Travis | not_available | needs_credentials | deferred | deferred | deferred |
+| Austin | TX | Travis | ok | needs_credentials | deferred | deferred | deferred |
 | Nashville | TN | Davidson | ok | not_available | deferred | deferred | deferred |
 | Charlotte | NC | Mecklenburg | ok | not_available | deferred | deferred | deferred |
 | Tampa | FL | Hillsborough | ok | ok | deferred | deferred | deferred |
@@ -76,29 +76,61 @@ patterns to generalize".
 
 ## Phoenix, AZ (Maricopa County)
 
-### Assessor — `phoenixAssessor.ts` — ✅ live
+### Assessor — `phoenixAssessor.ts` — ✅ live (re-verified 2026-07-13)
 
 | Field | Value |
 |---|---|
-| Endpoint | `https://services6.arcgis.com/btCzjPTmhHGPvKkG/ArcGIS/rest/services/Parcels/FeatureServer/0/query` |
+| Endpoint | `https://services.arcgis.com/ykpntM6e3tHvzKRJ/arcgis/rest/services/Parcel_Data_View/FeatureServer/0/query` |
 | Auth | None |
 | Rate limit | ESRI hosted FeatureServer default |
 | State gate | `AZ` (short-circuits otherwise) |
-| Query shape | `where=SITUS_ADDRESS LIKE '{addr}%'` |
+| Query shape | `where=PropertyFullStreetAddress LIKE '{addr}%'` |
 | Source tag | `maricopa` |
 
-Expected fields (verify with `…/0?f=json` if results look empty):
-`APN`, `OWNER_NAME`, `SITUS_ADDRESS`, `YEAR_BUILT`, `TOTAL_BLDG_SQFT`
-(or `LIVING_AREA`), `LAND_AREA_SF` (or `LAND_AREA` in acres — code
-detects and converts), `PROPERTY_USE_DESC`, `FULL_CASH_VALUE`,
-`LOCKED_SALE_PRICE`, `SALE_DATE`.
+The previous endpoint (`services6.arcgis.com/btCzjPTmhHGPvKkG/ArcGIS/
+rest/services/Parcels/FeatureServer/0`) is **dead** — that org id
+(`btCzjPTmhHGPvKkG`) no longer resolves at all, even with the correct
+lowercase `arcgis` path segment (`{"error":{"code":400,"message":"Invalid
+URL"}}`). This was not the same class of bug as Denver's casing issue;
+the org id itself is stale. Replacement found via the ArcGIS Online
+Sharing REST API (`sharing/rest/search` scoped to Maricopa's org id
+`ykpntM6e3tHvzKRJ`) — item **"Parcel Data"** (owner `MaricopaCountyGIS`,
+item id `4c0a493411514600a6f7ffdc67d41e82`), a hosted view over the
+Assessor's real parcel table (layer name `ASR_Parcels`).
+
+**Verified live, with a real query** (not just metadata): queried
+`PropertyCity='PHOENIX' AND PropertyUseDescription LIKE '%APARTMENT%'`
+to find a real 100+ unit complex, then re-queried by
+`PropertyFullStreetAddress LIKE '8130 W INDIAN SCHOOL RD%'` and got back
+a genuine matching parcel — owner `MCP TIDES ON WEST INDIAN SCHOOL OWNER
+LLC`, `PropertyUseDescription` = "APARTMENTS 100+ UNITS 2 STORY", sale
+price $37,860,000, sale date 2021-03-01, `FullCashValue` $30,492,500,
+`ConstructionYear` 1984.
+
+**Confirmed real field names** (from `…/0?f=json`, cross-checked against
+the live query above): `APN`, `OwnerName`, `OwnerAddressLine1/City/
+State/ZipCode`, `PropertyFullStreetAddress`, `PropertyCity`,
+`PropertyZipCode`, `ConstructionYear`, `LivableArea_SqFt`,
+`LotSize_SqFt` (or `LotSize_Acre` — code converts), `PropertyUseCode`,
+`PropertyUseDescription`, `FullCashValue` (preferred — uncapped market
+value) / `AssessedFullCashValue` (capped, ratio-adjusted), `SalePrice`,
+`SaleDate` (epoch ms).
 
 **Caveats**
-- Maricopa has moved this FeatureServer slug twice in the last 24
-  months. If the endpoint 404s, search the Maricopa Open GIS portal
-  ([mcassessor.maricopa.gov](https://mcassessor.maricopa.gov/)) for the
-  current Parcels layer and update the constant.
+- **No unit-count field.** This layer has nothing equivalent to
+  `TOTAL_UNITS` — `PropertyUseDescription` only carries bucketed text
+  ranges ("APARTMENTS 25 - 99 UNITS", "APARTMENTS 100+ UNITS"), not an
+  exact count. `AssessorRecord.units` is left `undefined` for Phoenix;
+  don't parse the range text, it's not precise enough to trust.
+- `LivableArea_SqFt` is frequently `null` for large multifamily/
+  commercial parcels (confirmed on the verification record above) — the
+  roll tracks those by improvement value instead. Expect `sqft` to be
+  missing on most apartment-complex-sized records.
 - Sales fields lag — expect 30-90 day delay on recent transactions.
+- If this slug moves again, re-run the `sharing/rest/search` query
+  (`q=owner:MaricopaCountyGIS AND type:"Feature Service"` against
+  `https://www.arcgis.com/sharing/rest/search`) scoped to org id
+  `ykpntM6e3tHvzKRJ` and update the constant.
 
 ### Secretary of State — stub (`not_available`)
 
@@ -119,7 +151,7 @@ scraper yet built.
   polygons. Either works as the base. ACS tract scoring is already
   national.
 - **Follow-up / portfolio:** Maricopa FeatureServer supports group-by
-  `OWNER_NAME`. Same pattern as Denver — one owner → N parcels.
+  `OwnerName`. Same pattern as Denver — one owner → N parcels.
 - Deferred because each is ~300 LOC and the buy-box value comes first
   from assessor lookup.
 
@@ -127,25 +159,61 @@ scraper yet built.
 
 ## Austin, TX (Travis County)
 
-### Assessor — stub (`not_available`)
+### Assessor — `austinAssessor.ts` — ✅ live (re-verified 7/2026)
 
-TCAD (Travis Central Appraisal District) has **no public REST API**.
+TCAD (Travis Central Appraisal District) itself still has **no public
+REST API** as of this update — `traviscad.org/property-search/` is
+still portal-only. What changed: **Travis County's own GIS department
+(Transportation & Natural Resources) republishes the TCAD tax-roll
+parcel layer for free** via ArcGIS. This was missed in the 4/2026 pass
+(we only checked traviscad.org and Travis County's general open-data
+hub, not the county's dedicated tax-maps ArcGIS host) and is confirmed
+live now.
 
 | Field | Value |
 |---|---|
-| Portal | `https://www.traviscad.org/property-search/` |
-| Bulk data | Paid; mailto `public-information@tcad.org` |
-| UT Austin Data | `dataverse.tdl.org` archives TCAD tax rolls — stale (2-3 year lag) |
+| Endpoint | `https://taxmaps.traviscountytx.gov/arcgis/rest/services/Parcels/MapServer/0/query` |
+| Auth | None |
+| Rate limit | ArcGIS MapServer default; `maxRecordCount` 2000 |
+| Query shape | `?where=situs_num='{num}' AND situs_address LIKE '%{STREET_CORE}%'&outFields=*&f=json&resultRecordCount=1` |
+| State gate | `TX` |
+| Source tag | `travis` |
+| Live check (2026-07-13) | 373,683 parcels total; 354,093 with non-zero `market_value`. `situs_num='1200' AND situs_address LIKE '%CONGRESS%'` → PROP_ID 100851, "SOUTH CONGRESS PARTNERS LLC", `market_value` $4,269,755, `F1year_imprv` 1915, `land_type_desc` "COMMERCIAL IMPROVED". |
 
-**Fallback while deferred:** the snapshot builder routes through
-ATTOM + RentCast when the assessor returns `not_available`. Austin
-works, the data is just second-hand.
+**Coverage gaps in this feed (confirmed live, not assumed):**
+- `assessed_val` / `appraised_val` are **NULL for every one of the
+  373,683 rows** (checked with `returnCountOnly=true`). Only
+  `market_value` is populated — the provider uses it as the
+  `assessedValue` proxy.
+- **No building-characteristics fields** — no living-area/sqft column,
+  no unit-count column. This is a cadastral/tax-roll GIS layer, not
+  TCAD's internal CAMA database. `units` and `sqft` are always
+  `undefined` for Austin records.
+- **No sale-price field**, and this isn't a feed gap — **Texas is a
+  non-disclosure state**, so sale consideration is never required on a
+  recorded deed and TCAD doesn't publish it anywhere public.
+  `deed_date` exists in the layer but records any deed change (trust,
+  LLC, name-change transfers included), not only arms-length sales, so
+  the provider leaves `lastSalePrice`/`lastSaleDate` both `undefined`
+  rather than mislabel a deed recording as a sale.
+- `situs_street` is unreliable — every sampled row had it hard-set to
+  the literal string `"TX"` (a data-quality bug in the published
+  layer; the real street name only appears inside the combined
+  `situs_address` string, e.g. `"S 1200 CONGRESS AVE   TX 78704"`).
+  The provider queries `situs_num` (exact) + `situs_address` (CONTAINS
+  on the stripped street-name core) instead of trusting `situs_street`.
 
-**Plan to light up:**
-1. Apply for a TCAD API partner account (no public tier as of 4/2026)
-2. *Or* subscribe to a Texas-state-wide CAD data aggregator (Regrid,
-   DataTree — paid)
-3. *Or* scrape the public portal per parcel (rate-limited, brittle)
+**Fallback:** the snapshot builder still routes through ATTOM +
+RentCast for sale price, unit count, and square footage, since this
+feed can't supply them — Austin now gets a real owner/value/year-built/
+lot-size baseline from TCAD instead of relying on ATTOM/RentCast for
+everything.
+
+**If a richer source ever appears:** a full CAMA-style feed (with
+sqft/units/sale price) would still require either a TCAD API partner
+account (no public tier as of this writing) or a paid state-wide CAD
+aggregator (Regrid, DataTree). Not pursued since the free parcel feed
+above already covers the core fields.
 
 ### Secretary of State — stub (`needs_credentials`)
 
@@ -162,26 +230,57 @@ session handling lives behind a paid-features flag.
 
 ## Nashville, TN (Davidson County)
 
-### Assessor — `nashvilleAssessor.ts` — ✅ live
+### Assessor — `nashvilleAssessor.ts` — ✅ live (re-verified 2026-07-13)
+
+The previously documented `Cadastral/Parcels_SP/MapServer/0` path does not
+exist on `maps.nashville.gov` — hitting it returns a real ArcGIS HTTP 500
+`{"error":{"code":500,"message":"Service Cadastral/Parcels_SP/MapServer
+not found "}}`, i.e. the service/folder moved, not a casing/token-gateway
+issue like Denver's bug. Walked the catalog
+(`/arcgis/rest/services?f=json` → `Cadastral` folder → `?f=json`) and
+found the real, live service:
 
 | Field | Value |
 |---|---|
-| Endpoint | `https://maps.nashville.gov/arcgis/rest/services/Cadastral/Parcels_SP/MapServer/0/query` |
+| Endpoint | `https://maps.nashville.gov/arcgis/rest/services/Cadastral/Parcels/MapServer/0/query` |
+| Layer | `0` — "Ownership Parcels" |
 | Auth | None |
 | Rate limit | MapServer default (tighter than FeatureServer — pace at ~1 req/sec for bulk) |
 | State gate | `TN` |
 | Source tag | `davidson_tn` |
 
-Expected fields: `APN`, `PROP_ADDR`, `OWNER_NAME`, `LAND_USE_DESC`,
-`TOTAL_VALUE`, `BLDG_SQ_FT`, `LOT_SIZE`, `YEAR_BUILT`, `NO_UNITS`,
-`SALE_DATE` (epoch ms), `SALE_PRICE`.
+Verified live via curl: `.../Cadastral/Parcels/MapServer/0?f=json` returns
+real layer metadata (55 fields), and
+`.../query?where=PropAddr LIKE '400 STAR BLVD%'&outFields=*&f=json`
+returns a real matching parcel (Graybrook Apartments, 400 Star Blvd —
+owner, `TotlAssd`/`TotlAppr` values, `LUDesc`, sale price/date). Confirmed
+data, not just metadata.
+
+Real field names (confirmed against live `?f=json` schema + sample
+queries): `APN`, `Owner`, `OwnAddr1/2/3`, `OwnCity`, `OwnState`, `OwnZip`,
+`PropAddr`, `PropHouse`, `PropStreet`, `PropCity`, `PropState`, `PropZip`,
+`LUCode`, `LUDesc` (e.g. `"APARTMENT: LOW RISE (BUILT SINCE 1960)"`),
+`LandAppr`, `ImprAppr`, `TotlAppr`, `LandAssd`, `ImprAssd`, `TotlAssd`,
+`Acres`, `StatedArea`, `DeededAcreage`, `SalePrice`, `OwnDate` (epoch ms).
 
 **Caveats**
-- `SALE_DATE` is ArcGIS-epoch (milliseconds since 1970). The provider
+- This layer has **no building-characteristics columns** — no year
+  built, no unit count, no building square footage. It's a
+  parcel/ownership/valuation (CAMA-adjacent) dataset, not a full
+  building record. The provider leaves `yearBuilt`, `units`, and `sqft`
+  undefined; only `lotSqft` is populated, derived from `Acres` (× 43,560).
+- `OwnDate` is ArcGIS-epoch (milliseconds since 1970). The provider
   converts via `new Date(n).toISOString()`.
+- `TotlAssd` is `0` for some parcels (e.g. government/exempt); the
+  provider falls back to `TotlAppr` in that case.
+- Match on `PropAddr` (full situs address), not `PropStreet` — the
+  latter sometimes carries a stray leading space in this dataset
+  (e.g. `" BROADWAY"`).
 - Davidson publishes through Metro Nashville GIS; the service root
   occasionally moves between `maps.nashville.gov` and
-  `gisservices.nashville.gov`. Check both if the primary 404s.
+  `gisservices.nashville.gov`. Check both if the primary 404s, and
+  re-walk `/arcgis/rest/services?f=json` to find the current path if the
+  folder/service name changes again.
 
 ### Secretary of State — stub (`not_available`)
 
@@ -196,56 +295,109 @@ Free portal, scraper not implemented.
 
 ## Charlotte, NC (Mecklenburg County)
 
-### Assessor — `charlotteAssessor.ts` — ✅ live
+### Assessor — `charlotteAssessor.ts` — ✅ live (fixed 2026-07-13)
+
+The previously hardcoded endpoint
+(`.../server/rest/services/Parcels_Landmarks/MapServer/1/query`) 404'd
+with `{"error":{"code":404,"message":"Service not found"}}` — that
+service no longer exists on Mecklenburg's self-hosted ArcGIS Server
+(this is a plain 404, not the ArcGIS-Online-gateway capitalization bug
+seen on Denver). Found the current live service by browsing the
+catalog root (`.../server/rest/services?f=json`) and matching against
+the real field list via a live `resultRecordCount=1` query — the
+`OWNER`/`PID`/`LOCADDR`/`YEARBUILT`/etc. fields the old code guessed
+never matched this service's actual (lowercase, differently-named)
+schema.
 
 | Field | Value |
 |---|---|
-| Endpoint | `https://meckgis.mecklenburgcountync.gov/server/rest/services/Parcels_Landmarks/MapServer/1/query` |
+| Endpoint | `https://meckgis.mecklenburgcountync.gov/server/rest/services/TaxParcel_camadata/FeatureServer/0/query` |
 | Auth | None |
-| State gate | `NC` + county `Mecklenburg` (Wake also `NC`) |
+| State gate | `NC` + county `Mecklenburg` (routed via `market.key === 'charlotte'` in `assessorDispatcher.ts`; the file's own state check is a secondary guard) |
 | Source tag | `mecklenburg_nc` |
 
-Expected fields: `PID` / `TAXPID`, `OWNER`, `LOCADDR`, `YEARBUILT`,
-`BLDG_AREA` (or `HEATEDAREA`), `LAND_AREA`, `NUM_UNITS` (or `UNITS`),
-`TOTAL_VALUE`, `SALEDATE` (epoch **or** ISO string — both handled),
-`SALEPRICE`.
+Verified live fields (lowercase, unlike the old guessed schema):
+`pid` / `parcelid`, `address` (full situs string, used for the `LIKE`
+match), `streetnumber`/`streetname`, `ownrlstnme`/`ownrfrstnme`,
+`yearbuilt`, `heatedarea` (sqft, falls back to `finarea`/`totalarea`),
+`gisacres`/`legalacres` (lot size in **acres**, converted to sqft ×
+43,560 — there is no native lot-sqft field), `resunits`/`comunits`,
+`totalvalue`/`totmarkval`, `landuse_description`/`lusecode`,
+`saleprice`, `saledate` (epoch ms).
 
 **Caveats**
-- Mecklenburg publishes **two** parcel services: the MapServer path
-  above (pulled here) and a separate POLARIS REST at
-  `https://polaris3g.mecklenburgcountync.gov/...` which has richer
-  attributes but gates some fields behind login. Stick with MapServer
-  for the free tier.
-- `SALEDATE` inconsistency is deliberate upstream — some records were
-  migrated as strings from a legacy system.
+- This layer has **one row per building**, not one row per parcel. A
+  multi-building apartment parcel (verified example: PID `22323141` on
+  Atkins Circle Dr, 2004-built, "MULTI FAMILY") returns multiple rows
+  with different `resunits`/`heatedarea` per building. The provider
+  takes the first match (same best-effort pattern as the other
+  per-county providers), so unit/sqft totals on multi-building
+  complexes may reflect a single building rather than the parcel
+  total.
+- Mecklenburg also publishes a POLARIS UI at
+  `https://polaris3g.mecklenburgcountync.gov/` (property-record search
+  front end) and a separate ownership/value layer
+  (`TaxParcel_Camaownershipvalues`) — not used here since
+  `TaxParcel_camadata` already carries both ownership and building
+  detail in one row.
 
 ---
 
 ## Tampa, FL (Hillsborough County)
 
-### Assessor — `tampaAssessor.ts` — ✅ live
+### Assessor — `tampaAssessor.ts` — ✅ live (fixed 2026-07-13, previously dead)
 
 | Field | Value |
 |---|---|
-| Endpoint | `https://maps.hcpafl.org/arcgis/rest/services/HCPA_Public/Parcel_Info/MapServer/0/query` |
-| Auth | None |
+| Endpoint | `https://arcgis.tampagov.net/arcgis/rest/services/Parcels/TaxParcel/FeatureServer/0/query` |
+| Auth | None (read-only, `capabilities: "Query"`) |
 | State gate | `FL` + county `Hillsborough` |
 | Source tag | `hillsborough_fl` |
 
-Schema follows the **Florida DR-501** statewide tax-roll standard,
-which means the same field names apply to every FL county we ever add
-(Miami-Dade, Orange, Broward, Palm Beach…): `FOLIO`, `JV` (Just
-Value), `AV` (Assessed Value), `TV` (Taxable Value), `ACT_YR_BLT`,
-`TOT_LVG_AR`, `LND_SQFOOT` (or `LND_ACRES` — convert), `DOR_UC` (use
-code), `SALE_PRC1`, `SALE_YR1` + `SALE_MO1` (concat to ISO date with
-day=01).
+**This was broken and has been fixed.** The old URL
+(`maps.hcpafl.org/arcgis/rest/services/HCPA_Public/Parcel_Info/MapServer/0/query`)
+was never a real ArcGIS endpoint — `maps.hcpafl.org` is HCPA's own React
+SPA web map; any path on that host, including `/arcgis/rest/services/...`,
+returns the SPA's `index.html` (HTTP 200, `<!doctype html>...HCPA GIS Web
+Map`), not JSON. It looks like this URL was never verified against a live
+service. The real free public endpoint is **City of Tampa GIS's
+`Parcels/TaxParcel` layer**, whose metadata `description` field states it
+carries "Hillsborough County Property Appraiser Data (City & county
+Parcels)" — i.e. it's the same county-wide HCPA tax roll, just hosted on
+Tampa's ArcGIS Server instead of HCPA's own domain. Verified live via
+curl on 2026-07-13: metadata call, a bulk sample query, and an
+address-match query using the exact `SITE_ADDR LIKE '<addr>%'` pattern
+the code issues all returned real feature rows.
+
+**The FL DR-501 field-name assumption did NOT hold.** The doc previously
+claimed the standard DR-501 columns (`FOLIO`, `JV`, `AV`, `TV`,
+`ACT_YR_BLT`, `TOT_LVG_AR`, `LND_SQFOOT`/`LND_ACRES`, `DOR_UC`,
+`SALE_PRC1`, `SALE_YR1`/`SALE_MO1`) would carry over to every future FL
+county. The live Hillsborough/Tampa layer uses its own, differently
+named schema instead: `FOLIO` (present, but not zero-padded 12-digit —
+values like `"8.0100"`; `STRAP` is the more reliable stable parcel key),
+`OWNER`, `JUST` (Just/Market Value), `ASD_VAL` (Assessed Value), `TAX_VAL`
+(Taxable Value), `ACT` (Actual Year Built), `EFF` (Remodel Year),
+`HEAT_AR` (Living Area sqft), `ACREAGE` (decimal acres — **no direct
+land-sqft column exists**, must convert), `DOR_C` (DOR Use Code),
+`S_DATE` (Sale Date — **epoch ms**, not year+month columns), `AMT` (Sale
+Amount). There is also **no unit-count column at all** (no
+`NO_UNITS`/`TOT_UNITS` analog), so `units` is always left undefined for
+this provider. **Conclusion: do not assume DR-501 field names for future
+FL counties (Miami-Dade, Orange, Broward, Palm Beach…) — verify each
+county's live endpoint and schema independently, same as every other
+market.**
 
 **Caveats**
-- We prefer `JV` over `AV` for value display — JV is the uncapped
-  market value; AV is after the Save-Our-Homes cap and is artificially
-  low for long-held homesteads.
-- Hillsborough doesn't expose day-of-sale, only year + month. Day is
-  always reported as `01`.
+- We prefer `JUST` (Just/Market Value) over `ASD_VAL` for value display —
+  `JUST` is the uncapped market value; `ASD_VAL` can lag due to
+  assessment caps (e.g. Save-Our-Homes for homesteaded residential).
+- `ACT`/`EFF`/`HEAT_AR` report `0` (not null) on vacant/unbuilt parcels —
+  treated as "no value" rather than a literal year-built-0 or 0 sqft.
+- `S_DATE` is an epoch-ms date field (same shape as Denver's
+  `SALE_DATE`), not Hillsborough's old assumed year+month columns.
+- `AMT` (sale amount) of `0` is the sentinel for "no recorded sale" and
+  is filtered out, same handling as Denver's `SALE_PRICE`.
 
 ### Secretary of State — `floridaSos.ts` — ✅ live (Sunbiz)
 
@@ -278,22 +430,44 @@ Parsed blocks from the detail page: "Detail by Entity Name",
 
 | Field | Value |
 |---|---|
-| Endpoint | `https://maps.raleighnc.gov/arcgis/rest/services/Parcels/MapServer/0/query` |
+| Endpoint | `https://maps.raleighnc.gov/arcgis/rest/services/Property/Property/FeatureServer/0/query` |
 | Auth | None |
 | State gate | `NC` + county `Wake` |
 | Source tag | `wake_nc` |
 
-Expected fields: `REID` / `PIN`, `OWNER`, `SITE_ADDRESS`,
-`TOTAL_VALUE_ASSD`, `YEAR_BUILT`, `UNITS`, `HEATED_AREA` (or
-`TOTAL_SALES_AREA`), `DEEDED_ACREAGE` (provider converts acres →
-sqft), `TOTSALPRICE`, `SALE_DATE` (epoch ms).
+**2026-07-13 fix:** the previously hardcoded URL
+(`.../Parcels/MapServer/0/query`) doesn't exist on this host — that
+service/folder combo returns `{"error":{"code":499,"message":"Token
+Required"}}`, which looks like an auth failure but is actually ArcGIS
+Server's way of saying "no such resource" for this particular
+misconfiguration (the host already used lowercase `arcgis` in the
+path, so this is a different failure mode than the Denver casing bug).
+Browsing the catalog root
+(`https://maps.raleighnc.gov/arcgis/rest/services?f=json`) shows no
+top-level `Parcels` service; the real parcel layer lives in the
+`Property` folder as `Property/Property`, published as both a
+MapServer and a FeatureServer. Verified live via curl on 2026-07-13:
+`Property/Property/FeatureServer/0?f=json` returns real layer metadata
+with no token, and querying layer 0 (`where=SITE_ADDRESS LIKE
+'421 FAYETTEVILLE%'`) returns real parcel attributes anonymously
+(e.g. a 578-unit downtown Raleigh office/parking parcel with full
+ownership + valuation data).
+
+Verified fields (from the live layer-0 schema): `REID` (primary key,
+falls back to `PIN_NUM`), `OWNER`, `SITE_ADDRESS`,
+`TOTAL_VALUE_ASSD`, `YEAR_BUILT`, `TOTUNITS`, `HEATEDAREA` (sqft),
+`DEED_ACRES` (provider converts acres → sqft for `lotSqft`),
+`TOTSALPRICE`, `SALE_DATE` (epoch ms), `TYPE_USE_DECODE` /
+`PROPDESC` / `LAND_CLASS_DECODE` (property classification, in
+preference order).
 
 **Caveats**
 - Wake + Mecklenburg both return `stateCode='NC'`; dispatcher
-  disambiguates by county name (or FIPS 37119 vs 37183).
-- City of Raleigh publishes the layer; Wake County separately
+  disambiguates by county name (or FIPS 37183 vs 37119).
+- City of Raleigh publishes this layer; Wake County separately
   publishes a richer `realestatesalesandimprovements` FeatureServer
-  that we may layer in later for historical sales.
+  that we may layer in later for historical sales — that one is
+  unverified and was NOT used here.
 
 ---
 
@@ -310,13 +484,14 @@ Deferred deliberately — each MSA needs:
   address extraction.
 - **Portfolio:** reverse index over the assessor — owner → parcels.
   Same group-by pattern; the per-MSA piece is UI-surface owner-name
-  normalization (Maricopa uses `OWNER_NAME`, Mecklenburg uses `OWNER`,
+  normalization (Maricopa uses `OwnerName`, Mecklenburg uses `OWNER`,
   Wake uses `OWNER`, Hillsborough uses a derived owner string from
   the DR-501 `OWN_NAME` field).
 
 Priority order once assessor/SoS coverage matures: **Phoenix →
 Tampa → Nashville → Charlotte → Raleigh → Austin**, matching buy-box
-pipeline value. Austin waits on a real assessor source.
+pipeline value. Austin's assessor is now live (see its section above);
+neighborhoods/follow-up/portfolio are still deferred.
 
 ---
 
@@ -349,7 +524,10 @@ pipeline value. Austin waits on a real assessor source.
   against documented conventions (ESRI-common naming, FL DR-501
   statewide standard). Some field names are likely off by one
   underscore. First empty result in prod → re-pull the layer's
-  `?f=json` and reconcile.
+  `?f=json` and reconcile. **Phoenix is no longer in this bucket** — its
+  endpoint and schema were re-verified live 2026-07-13 (see the Phoenix
+  section above); the old org id had gone dead and was swapped for a
+  confirmed-working one with real query results checked field-by-field.
 - **Sales-price lag.** Every county assessor lags current transactions
   by 30-90 days. For live deals layer RentCast/ATTOM on top.
 - **Neighborhood polygon layers.** Candidates exist for every new
@@ -360,6 +538,11 @@ pipeline value. Austin waits on a real assessor source.
   - Charlotte: Mecklenburg `Neighborhood Statistical Areas`
   - Tampa: Hillsborough `Community Planning Areas`
   - Raleigh: Raleigh `Citizens Advisory Council Areas`
-- **Austin assessor.** Still no path to a free machine-readable
-  Travis CAD feed. Either sign a partner agreement or punt to a
-  paid aggregator.
+- **Austin assessor — resolved 7/2026.** Travis County TNR's public
+  parcel feed (`taxmaps.traviscountytx.gov`) covers owner/market
+  value/year-built/lot-size/property-class. It has no unit count, sqft,
+  or sale price (Texas non-disclosure state + no CAMA data in this
+  layer) — those still come from ATTOM/RentCast. A full CAMA-style feed
+  would still need a TCAD partner agreement or a paid aggregator, but
+  isn't worth pursuing given the free feed already covers the core
+  fields.

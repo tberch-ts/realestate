@@ -11,8 +11,14 @@ import type { AssessorRecord, GeocodedAddress, ProviderResult } from '@mfa/share
 //
 // Layer id is 245 (yes, three digits — that's how Denver registered it
 // after the migration). Same host as before; just renamed services.
+//
+// The path segment must be lowercase "arcgis" — ArcGIS Online's hosted
+// gateway treats "/ArcGIS/rest/services/" as a different (token-gated)
+// route and returns HTTP 200 with a `{"error":{"code":499,"message":
+// "Token Required"}}` body instead of a real 404. Confirmed live:
+// lowercase works anonymously, mixed-case does not.
 const DENVER_PARCELS =
-  'https://services1.arcgis.com/zdB7qR0BtYrg0Xpl/ArcGIS/rest/services/ODC_PROP_PARCELS_A/FeatureServer/245/query';
+  'https://services1.arcgis.com/zdB7qR0BtYrg0Xpl/arcgis/rest/services/ODC_PROP_PARCELS_A/FeatureServer/245/query';
 
 interface DenverParcelAttrs {
   SCHEDNUM?: string;

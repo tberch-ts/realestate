@@ -56,7 +56,7 @@ export interface AssessorRecord {
     | 'denver_residential'
     | 'denver_commercial'
     | 'maricopa'         // Phoenix MSA
-    | 'travis'           // Austin MSA (TCAD — no public API as of 2026)
+    | 'travis'           // Austin MSA (Travis County TNR parcel feed, live as of 7/2026)
     | 'davidson_tn'      // Nashville MSA
     | 'mecklenburg_nc'   // Charlotte MSA
     | 'hillsborough_fl'  // Tampa MSA
