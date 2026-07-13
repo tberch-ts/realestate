@@ -46,7 +46,10 @@ fly secrets set --app mfa-api \
   FBI_API_KEY="..." HUD_API_TOKEN="..." \
   BASIC_AUTH_USER="mfa" BASIC_AUTH_PASS="..." \
   AUTH_MODE="both" \
-  CORS_ALLOWED_ORIGINS="https://mfa-web.fly.dev,https://re.talkstud.io,https://smartinvestorcrm.com,https://<github-username>.github.io"
+  CORS_ALLOWED_ORIGINS="https://mfa-web.fly.dev,https://re.talkstud.io,https://smartinvestorcrm.com,https://<github-username>.github.io" \
+  POSTGRID_API_KEY="live_sk_..." POSTGRID_API_KEY_TEST="test_sk_..." \
+  STRIPE_SECRET_KEY="sk_live_..." STRIPE_WEBHOOK_SECRET="whsec_..." STRIPE_V2_WEBHOOK_SECRET="whsec_..." \
+  STRIPE_PRICE_PRO="price_..." STRIPE_PRICE_TEAM="price_..."
 fly deploy -c fly.api.toml
 curl https://mfa-api.fly.dev/health   # expect {"ok":true,...}
 ```
@@ -54,6 +57,17 @@ curl https://mfa-api.fly.dev/health   # expect {"ok":true,...}
 Migrations: `fly ssh console -a mfa-api -C "node apps/api/dist/db/migrate.js"`,
 or run `npm run db:migrate` locally against the Fly Postgres connection string
 (`fly postgres connect -a mfa-postgres` to get it / open a psql shell).
+
+PostGrid keys come from https://dashboard.postgrid.com/ (Settings > API Keys).
+After deploying, set the sender address once (required before any letter can
+be created) — either through the web UI Settings page, or directly:
+```bash
+curl -X PUT https://mfa-api.fly.dev/api/postgrid/sender \
+  -H "Content-Type: application/json" \
+  -d '{"addressLine1":"...","city":"...","provinceOrState":"...","postalOrZip":"...","companyName":"..."}'
+```
+Check `curl https://mfa-api.fly.dev/api/postgrid/status` to confirm both live
+and test keys are recognized before mailing a real LOI.
 
 ### 2. Provision & deploy the web app
 
