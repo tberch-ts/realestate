@@ -20,11 +20,11 @@ this PR, never verified live.
 - [ ] **[existing]** Sign in (email/password and Google) redirects to `/app`
 - [ ] **[existing]** Forgot-password email actually arrives and resets
 - [ ] **[existing]** Sign out returns to `/`
-- [ ] **[existing]** Hitting `/app/*` while signed out redirects to `/sign-in`, no flash of dashboard content
+- [x] **[existing]** Hitting `/app/*` while signed out redirects to `/sign-in`, no flash of dashboard content
 
 ## Dashboard
 
-- [ ] **[new]** Greeting shows "Good morning/afternoon/evening, {first name}" (time-based, not static "Welcome back")
+- [x] **[new]** Greeting shows "Good morning/afternoon/evening, {first name}" (time-based, not static "Welcome back")
 - [ ] **[existing]** Active deals / contacts / LOI counts match what's actually in Firestore
 - [ ] **[existing]** Recent deals list links to the right deal detail pages
 
