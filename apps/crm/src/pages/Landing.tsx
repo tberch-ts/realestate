@@ -23,7 +23,7 @@ const FEATURES = [
     icon: MapPin, color: '#f97316',
     title: 'Hotspot Map',
     sub: 'Every neighborhood rated, 6 metros',
-    body: 'Color-coded map of every neighborhood in Phoenix, Nashville, Charlotte, Raleigh, Tampa, and Austin — scored by median income, rent, density, and rent burden. Click any zone for property candidates.',
+    body: 'Color-coded map of every neighborhood in Denver, Phoenix, Nashville, Charlotte, Raleigh, and Tampa — scored by median income, rent, density, and rent burden. Click any zone for property candidates.',
   },
   {
     icon: Search, color: '#3b82f6',
@@ -76,7 +76,7 @@ const FEATURES = [
 ]
 
 const DATA_SOURCES = [
-  { name: 'County Assessors', desc: 'Property records, unit counts, assessed values — all 6 markets' },
+  { name: 'County Assessors', desc: 'Property records, unit counts, assessed values — all 7 markets' },
   { name: 'Census ACS', desc: 'Median income, rent, rent burden by tract' },
   { name: 'HUD FMR', desc: 'Fair market rents by bedroom count + MSA' },
   { name: 'FRED / BLS', desc: 'Treasury rates, CPI, local unemployment' },
@@ -84,7 +84,7 @@ const DATA_SOURCES = [
   { name: 'SaaS rent & comp feeds', desc: 'Rent comps and cap rate benchmarks via licensed APIs' },
 ]
 
-const MARKETS_LIVE = ['Phoenix', 'Nashville', 'Charlotte', 'Raleigh', 'Tampa', 'Austin']
+const MARKETS_LIVE = ['Denver', 'Phoenix', 'Nashville', 'Charlotte', 'Raleigh', 'Tampa']
 
 const STEPS = [
   {
@@ -121,7 +121,7 @@ const CLOSE_LIST = [
 const FAQS = [
   {
     q: 'Which markets are covered?',
-    a: 'Area scoring, the hotspot map, and property search are live in six metros: Phoenix, Nashville, Charlotte, Raleigh, Tampa, and Austin — with more markets on the roadmap. Market intel, the LOI builder, pipeline, CRM, and underwriting tools work for any market.',
+    a: 'Area scoring and the hotspot map are live in six metros: Denver, Phoenix, Nashville, Charlotte, Raleigh, and Tampa — with more markets on the roadmap. Property search (assessor data) is also live in Austin, though its hotspot map and area scoring aren’t yet. Market intel, the LOI builder, pipeline, CRM, and underwriting tools work for any market.',
   },
   {
     q: 'Is this a CRM, an underwriting tool, or a leads platform?',
@@ -209,9 +209,9 @@ function Nav() {
 const LEADERBOARD = [
   { name: 'Grant Park · PHX', score: 94, color: '#10b981' },
   { name: 'Antioch · BNA', score: 91, color: '#10b981' },
+  { name: 'Five Points · DEN', score: 89, color: '#10b981' },
   { name: 'NoDa · CLT', score: 87, color: '#3b82f6' },
   { name: 'Seminole Hts · TPA', score: 84, color: '#3b82f6' },
-  { name: 'East Austin · AUS', score: 79, color: '#f59e0b' },
 ]
 
 function Hero() {
@@ -330,7 +330,7 @@ function TrustStrip() {
       <div className="max-w-5xl mx-auto px-6 flex flex-wrap items-center justify-center gap-8">
         {[
           { icon: <Database size={14} className="text-blue-400" />,  label: 'Public + SaaS data, live', sub: 'County assessors · Census ACS · HUD FMR · FRED' },
-          { icon: <Star    size={14} className="text-amber-400" />, label: '6 markets scored', sub: 'Phoenix · Nashville · Charlotte · Raleigh · Tampa · Austin' },
+          { icon: <Star    size={14} className="text-amber-400" />, label: '6 markets scored', sub: 'Denver · Phoenix · Nashville · Charlotte · Raleigh · Tampa' },
           { icon: <Shield  size={14} className="text-green-400" />, label: 'Enterprise-grade auth', sub: 'Firebase Auth · Firestore security rules' },
           { icon: <Zap     size={14} className="text-purple-400" />, label: 'Stripe billing', sub: 'Cancel anytime · No annual lock-in' },
         ].map(({ icon, label, sub }) => (
