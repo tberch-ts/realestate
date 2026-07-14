@@ -68,6 +68,14 @@ service cloud.firestore {
       allow read, update: if isSignedIn() && (isOwner(resource) || isMember(resource));
       allow create: if isSignedIn() && request.auth.uid == request.resource.data.ownerId;
       allow delete: if isSignedIn() && isOwner(resource);
+
+      // LP commitments for this raise. ownerId is denormalized onto each
+      // doc so it can be checked directly without a get() on the parent
+      // raise — same pattern as contacts/{id}/interactions above.
+      match /lp_commitments/{lpId} {
+        allow read, update, delete: if isSignedIn() && request.auth.uid == resource.data.ownerId;
+        allow create: if isSignedIn() && request.auth.uid == request.resource.data.ownerId;
+      }
     }
 
     // Shared reference data (e.g. MSA-level market signals) — readable by

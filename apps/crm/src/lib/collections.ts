@@ -82,6 +82,31 @@ export interface CapitalRaise {
   updatedAt?: unknown
 }
 
+export const LP_STAGES = ['verbal', 'soft_commit', 'signed', 'funded'] as const
+export type LpStage = (typeof LP_STAGES)[number]
+
+export const LP_STAGE_LABELS: Record<LpStage, string> = {
+  verbal: 'Verbal',
+  soft_commit: 'Soft commit',
+  signed: 'Signed',
+  funded: 'Funded',
+}
+
+// Stored at capital_raises/{raiseId}/lp_commitments/{lpId}. ownerId is
+// denormalized from the parent raise so firestore.rules can check it
+// directly without a get() lookup (same pattern as contacts/{id}/interactions).
+export interface LpCommitment {
+  id: string
+  ownerId: string
+  raiseId: string
+  investorName: string
+  committedAmount?: number
+  stage: LpStage
+  notes?: string
+  createdAt?: unknown
+  updatedAt?: unknown
+}
+
 export const CONTACT_KINDS = ['broker', 'seller', 'investor', 'firm', 'other'] as const
 export type ContactKind = (typeof CONTACT_KINDS)[number]
 
