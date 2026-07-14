@@ -219,8 +219,20 @@ async function scoreNeighborhoods(
   // populated by this market's actually best neighborhoods, even if the
   // underlying composites are tight (true for small-count markets like
   // Phoenix's 15 villages).
+  //
+  // IMPORTANT: the displayed `score` is this market's RELATIVE rank, not an
+  // absolute quality measure — the #1 neighborhood in any market always
+  // lands near 95 even if every neighborhood's underlying numbers are
+  // mediocre. A raw input (e.g. rentBurdenedPct, a single-tract household
+  // COUNT, not a percentage despite the label) can look unremarkable while
+  // the neighborhood still ranks HOT relative to its market's peers — see
+  // the `breakdown` fields below, which expose the actual percentile inputs
+  // and rank position so the "why" is inspectable instead of opaque.
   const sorted = [...rawScores].sort((a, b) => a - b);
   const n = sorted.length;
+  const rankOrder = [...rawScores.keys()].sort((a, b) => rawScores[b] - rawScores[a]);
+  const rankPositionByIdx = new Map<number, number>();
+  rankOrder.forEach((scoreIdx, position) => rankPositionByIdx.set(scoreIdx, position + 1));
 
   for (let i = 0; i < raw.length; i++) {
     const r = raw[i];
@@ -237,6 +249,15 @@ async function scoreNeighborhoods(
     // Normalized name field — every market writes into `nbhd_name` so the
     // frontend map/click-handler stays market-agnostic.
     f.properties.nbhd_name = source.nameOf(f.properties);
+
+    // Explainability: the percentile inputs that produced `score`, plus
+    // this neighborhood's rank position among its market's peers.
+    f.properties.rankInMarket = rankPositionByIdx.get(i);
+    f.properties.totalInMarket = n;
+    f.properties.incomePercentile = percentile(r.income, incomes);
+    f.properties.rentPercentile = percentile(r.rent, rents);
+    f.properties.populationPercentile = percentile(r.pop, pops);
+    f.properties.rentBurdenPercentile = percentile(r.burdened, burdens);
   }
 
   return { geojson, withData };
