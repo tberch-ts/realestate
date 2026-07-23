@@ -6,8 +6,9 @@
 > or change a provider, update the matching section here.
 >
 > **Scope:** assessor, Secretary of State, neighborhoods, follow-up,
-> portfolio. National providers (Census, HUD, BLS, FBI UCR, ATTOM,
-> RentCast, Google Geocoding, EDGAR) are not repeated per-MSA.
+> portfolio, vacant land (land-wholesaling lead finder + saturation).
+> National providers (Census, HUD, BLS, FBI UCR, ATTOM, RentCast,
+> Google Geocoding, EDGAR) are not repeated per-MSA.
 >
 > **Conventions**
 > - Every endpoint URL matches the constant baked into the matching
@@ -23,15 +24,15 @@
 
 ## Index
 
-| MSA | State | County | Assessor | SoS | Neighborhoods | Follow-up | Portfolio |
-|---|---|---|---|---|---|---|---|
-| Denver | CO | Denver | ok | ok | ok | ok | ok |
-| Phoenix | AZ | Maricopa | ok | not_available | ok | deferred | deferred |
-| Austin | TX | Travis | ok | needs_credentials | deferred | deferred | deferred |
-| Nashville | TN | Davidson | ok | not_available | ok | deferred | deferred |
-| Charlotte | NC | Mecklenburg | ok | not_available | ok | deferred | deferred |
-| Tampa | FL | Hillsborough | ok | ok | ok | deferred | deferred |
-| Raleigh | NC | Wake | ok | not_available | deferred | deferred | deferred |
+| MSA | State | County | Assessor | SoS | Neighborhoods | Follow-up | Portfolio | Land |
+|---|---|---|---|---|---|---|---|---|
+| Denver | CO | Denver | ok | ok | ok | ok | ok | deferred |
+| Phoenix | AZ | Maricopa | ok | not_available | ok | deferred | deferred | deferred |
+| Austin | TX | Travis | ok | needs_credentials | deferred | deferred | deferred | blocked |
+| Nashville | TN | Davidson | ok | not_available | ok | deferred | deferred | deferred |
+| Charlotte | NC | Mecklenburg | ok | not_available | ok | deferred | deferred | deferred |
+| Tampa | FL | Hillsborough | ok | ok | ok | deferred | deferred | ok |
+| Raleigh | NC | Wake | ok | not_available | deferred | deferred | deferred | ok |
 
 `deferred` = the per-MSA provider isn't implemented yet but the data
 source has been scoped (see each MSA section). Frontend gates those
@@ -658,3 +659,72 @@ non-Denver markets.
   would still need a TCAD partner agreement or a paid aggregator, but
   isn't worth pursuing given the free feed already covers the core
   fields.
+
+---
+
+## Vacant land / lots (land-wholesaling strategy) — verification notes
+
+Added 2026-07-22 with the Empty Lots strategy. A market flips
+`landSupported: true` in `apps/api/src/config/markets.ts` only when its
+parcel source has all three of: (a) a land-use / property-class field
+that flags **vacant** parcels, (b) a **sale or deed date** (hold time is
+the strategy's key filter — 10+ years held), and (c) **owner name +
+mailing address**. Providers: `apps/api/src/providers/wakeLand.ts`,
+`hillsboroughLand.ts`, dispatched by `landDispatcher.ts`; saturation
+scoring in `landSaturation.ts`.
+
+### Raleigh / Wake — LIVE (verified 2026-07-22)
+
+- Endpoint: `https://maps.wake.gov/arcgis/rest/services/Property/Parcels/FeatureServer/0/query`
+- Vacant filter: `LAND_CLASS = 'VAC'` ("Vacant"), plus `AWI` ("Acre With
+  Improvement, No House"). Full decode list probed live via
+  `returnDistinctValues=true`.
+- Fields: `OWNER`, `ADDR1/ADDR2/ADDR3` (owner mailing; state+zip parsed
+  from the last line), `SITE_ADDRESS`, `CITY_DECODE`, `ZIPNUM`,
+  `DEED_ACRES`, `SALE_DATE`/`TOTSALPRICE`, `DEED_DATE` (epoch ms —
+  hold-time fallback when no market sale is recorded), `LAND_VAL`,
+  `TOTAL_VALUE_ASSD`, `YEAR_BUILT` (used by saturation's
+  new-construction signal).
+- Notes: compound `where` with `TIMESTAMP 'YYYY-MM-DD hh:mm:ss'`
+  verified working. Out-of-county heuristic: mailing zip not starting
+  275/276.
+
+### Tampa / Hillsborough — LIVE (verified 2026-07-22)
+
+- Endpoint: `https://arcgis.tampagov.net/arcgis/rest/services/Parcels/TaxParcel/FeatureServer/0/query`
+  — the City of Tampa ArcGIS server republishes the FULL Hillsborough
+  County Property Appraiser roll (city + county parcels), which routes
+  around the dead county host (`maps.hcpafl.org`, see the Tampa
+  assessor section).
+- Vacant filter: `DOR_C` (FL DOR use code, 4-char) — `'0000'` vacant
+  residential (verified live; distinct probe also showed 0006/0008/0029/
+  0040/0044/0045 sub-codes), `'1000'` vacant commercial, `'4000'`
+  vacant industrial (standard DOR codes, kept configurable in
+  `HILLSBOROUGH_VACANT_DOR_CODES`).
+- Fields: `OWNER`, `ADDR_1`/`CITY`/`STATE`/`ZIP` (owner mailing),
+  `SITE_ADDR`/`SITE_CITY`/`SITE_ZIP`, `ACREAGE`, `S_DATE` (epoch ms) /
+  `AMT` (0 = no qualified sale), `LEGAL1-4`, `ASD_VAL`, `LAND`, `ACT`
+  (actual year built — saturation's new-construction signal).
+- Notes: out-of-county heuristic: mailing zip not starting 335/336.
+
+### Rejected: FGIO Florida Statewide Cadastral (evaluated 2026-07-22)
+
+`services9.arcgis.com/Gh9awoU677aKree0/.../Florida_Statewide_Cadastral`
+has every DOR field statewide (10.8M parcels) but is unusable for live
+queries: attribute predicates on unindexed fields (`CO_NO`, `PHY_CITY`,
+`PHY_ZIPCD`) either 400 or full-scan for minutes, and spatial queries
+400 outright. Revisit only as a bulk-download source if more FL
+counties are wanted later.
+
+### Other markets — why gated
+
+- **Denver**: `Middle_Housing_Stock` (the followup/portfolio layer) is
+  housing-only. The general Denver Open Data assessor parcel layer needs
+  a live probe for CO vacant property-class codes (0xxx series) before
+  `landSupported` flips. One-line flip + a `denverLand.ts` clone of
+  `wakeLand.ts` once verified.
+- **Austin/Travis**: parcel feed has **no sale date** → can't compute
+  ownership length → hard-blocked for this strategy.
+- **Phoenix/Maricopa, Nashville/Davidson, Charlotte/Mecklenburg**: same
+  broken bulk-parcel hosts that gate follow-up/portfolio (see those
+  sections).

@@ -3,27 +3,72 @@ import {
   Building2, LayoutDashboard, Kanban, Search, Users, FileText,
   MapPin, Layers, FileSearch, BookOpen,
   TrendingUp, DollarSign, GraduationCap, Settings as SettingsIcon, LogOut,
+  LandPlot, Package, Flame, FileSignature,
 } from 'lucide-react'
+import type { StrategyKey } from '@mfa/shared'
 import { useAuth } from '../context/AuthContext'
+import { StrategyProvider, useStrategy, STRATEGY_LABELS } from '../lib/strategy'
 
-const NAV = [
+// `strategy` gates an item to one strategy's nav; undefined = shown in both.
+const NAV: Array<{
+  to: string
+  end?: boolean
+  icon: typeof LayoutDashboard
+  label: string
+  strategy?: StrategyKey
+}> = [
   { to: '/app', end: true, icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/app/deals', icon: Kanban, label: 'Deal Board' },
-  { to: '/app/property-search', icon: Search, label: 'Property Search' },
+  { to: '/app/property-search', icon: Search, label: 'Property Search', strategy: 'multifamily' },
   { to: '/app/contacts', icon: Users, label: 'Contacts' },
-  { to: '/app/loi', icon: FileText, label: 'LOIs' },
-  { to: '/app/hotspots', icon: MapPin, label: 'Hotspots' },
-  { to: '/app/portfolio', icon: Layers, label: 'Portfolio' },
-  { to: '/app/filings', icon: FileSearch, label: 'Filings' },
-  { to: '/app/playbook', icon: BookOpen, label: 'Playbook' },
+  { to: '/app/loi', icon: FileText, label: 'LOIs', strategy: 'multifamily' },
+  { to: '/app/hotspots', icon: MapPin, label: 'Hotspots', strategy: 'multifamily' },
+  { to: '/app/portfolio', icon: Layers, label: 'Portfolio', strategy: 'multifamily' },
+  { to: '/app/filings', icon: FileSearch, label: 'Filings', strategy: 'multifamily' },
+  { to: '/app/playbook', icon: BookOpen, label: 'Playbook', strategy: 'multifamily' },
+  { to: '/app/land/leads', icon: LandPlot, label: 'Land Leads', strategy: 'land' },
+  { to: '/app/land/buy-boxes', icon: Package, label: 'Builder Buy Boxes', strategy: 'land' },
+  { to: '/app/land/saturation', icon: Flame, label: 'Saturation Map', strategy: 'land' },
+  { to: '/app/land/contract', icon: FileSignature, label: 'Contract', strategy: 'land' },
+  { to: '/app/land/playbook', icon: BookOpen, label: 'Land Playbook', strategy: 'land' },
   { to: '/app/market', icon: TrendingUp, label: 'Market Intel' },
-  { to: '/app/capital', icon: DollarSign, label: 'Capital Raise' },
-  { to: '/app/learn', icon: GraduationCap, label: 'Learn' },
+  { to: '/app/capital', icon: DollarSign, label: 'Capital Raise', strategy: 'multifamily' },
+  { to: '/app/learn', icon: GraduationCap, label: 'Learn', strategy: 'multifamily' },
   { to: '/app/settings', icon: SettingsIcon, label: 'Settings' },
 ]
 
-export default function AppShell() {
+const STRATEGIES: StrategyKey[] = ['multifamily', 'land']
+
+function StrategyToggle() {
+  const { strategy, setStrategy } = useStrategy()
+  return (
+    <div
+      className="flex rounded-lg p-0.5 mb-5 text-xs"
+      style={{ background: 'var(--bg-base)', border: '1px solid var(--border)' }}
+      role="tablist"
+      aria-label="Strategy"
+    >
+      {STRATEGIES.map((s) => (
+        <button
+          key={s}
+          role="tab"
+          aria-selected={strategy === s}
+          onClick={() => setStrategy(s)}
+          className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md transition-colors ${
+            strategy === s ? 'bg-blue-600/20 text-blue-300 font-medium' : 'text-gray-500 hover:text-gray-300'
+          }`}
+        >
+          {s === 'multifamily' ? <Building2 size={13} /> : <LandPlot size={13} />}
+          {STRATEGY_LABELS[s]}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function Shell() {
   const { user, signOut } = useAuth()
+  const { strategy } = useStrategy()
   const navigate = useNavigate()
 
   async function handleSignOut() {
@@ -31,19 +76,23 @@ export default function AppShell() {
     navigate('/', { replace: true })
   }
 
+  const items = NAV.filter((i) => !i.strategy || i.strategy === strategy)
+
   return (
     <div className="min-h-screen flex" style={{ background: 'var(--bg-base)', color: '#f9fafb' }}>
       <aside
         className="w-56 shrink-0 border-r flex flex-col px-3 py-5"
         style={{ borderColor: 'var(--border)', background: 'var(--bg-surface)' }}
       >
-        <div className="flex items-center gap-2 px-2 mb-6">
+        <div className="flex items-center gap-2 px-2 mb-4">
           <Building2 size={18} className="text-blue-400" />
           <span className="font-bold tracking-tight text-sm">SmartInvestorCRM</span>
         </div>
 
+        <StrategyToggle />
+
         <nav className="flex-1 space-y-0.5">
-          {NAV.map(({ to, end, icon: Icon, label }) => (
+          {items.map(({ to, end, icon: Icon, label }) => (
             <NavLink
               key={to}
               to={to}
@@ -79,5 +128,13 @@ export default function AppShell() {
         <Outlet />
       </main>
     </div>
+  )
+}
+
+export default function AppShell() {
+  return (
+    <StrategyProvider>
+      <Shell />
+    </StrategyProvider>
   )
 }

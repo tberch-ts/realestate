@@ -26,6 +26,11 @@ import Playbook from './pages/Playbook';
 import MarketIntel from './pages/MarketIntel';
 import CapitalRaise from './pages/CapitalRaise';
 import CapitalRaiseDetail from './pages/CapitalRaiseDetail';
+import LandLeads from './pages/LandLeads';
+import BuyBoxes from './pages/BuyBoxes';
+import LandSaturation from './pages/LandSaturation';
+import LandContract from './pages/LandContract';
+import LandPlaybook from './pages/LandPlaybook';
 import Settings from './pages/Settings';
 import BillingSettings from './pages/BillingSettings';
 
@@ -57,6 +62,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
               <Route path="market" element={<MarketIntel />} />
               <Route path="capital" element={<CapitalRaise />} />
               <Route path="capital/:id" element={<CapitalRaiseDetail />} />
+              <Route path="land/leads" element={<LandLeads />} />
+              <Route path="land/buy-boxes" element={<BuyBoxes />} />
+              <Route path="land/saturation" element={<LandSaturation />} />
+              <Route path="land/contract" element={<LandContract />} />
+              <Route path="land/playbook" element={<LandPlaybook />} />
               <Route path="learn" element={<ComingSoon feature="Learn" />} />
               <Route path="settings" element={<Settings />} />
               <Route path="settings/billing" element={<BillingSettings />} />

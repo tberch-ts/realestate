@@ -80,6 +80,41 @@ Impact: HUD turns `needs_credentials` → `ok` (Fair Market Rents on every prope
 
 ---
 
+## Land strategy (Empty Lots) — shipped 2026-07-22, follow-ups
+
+The land-wholesaling strategy (strategy toggle, vacant-lot lead finder
+for Raleigh/Wake + Tampa/Hillsborough, builder buy boxes + matching,
+saturation map, Twilio SMS, 1-page assignment contract, Land Playbook)
+shipped as a full vertical slice. Deferred follow-ups, in rough priority
+order:
+
+- [ ] **Skip-trace integration** — parcel data has owner name + mailing
+  address but NO phone numbers; today phones are entered manually on the
+  contact. Wire a skip-trace API (BatchData / Endato / Skip Genie) as a
+  provider so "Text" is one click from a lead. This is the biggest
+  friction in the loop.
+- [ ] **Denver land provider** — probe the general Denver Open Data
+  parcel layer for CO vacant property-class codes (0xxx), then clone
+  `wakeLand.ts` and flip `landSupported`. See
+  data-sources-by-msa.md "Vacant land" section.
+- [ ] **Deploy checklist** — set `TWILIO_*` + `PUBLIC_API_URL` env on
+  the API host; point the Twilio number/Messaging Service inbound
+  webhook at `{PUBLIC_API_URL}/api/sms/inbound`; enable Advanced
+  Opt-Out on the Messaging Service; `firebase deploy --only
+  firestore:rules,firestore:indexes` (new `builder_buy_boxes`
+  collection + index).
+- [ ] **More counties** — any county whose parcel layer has land-use
+  codes + sale dates + owner mailing address is a ~1-file add
+  (`landDispatcher.ts` routes off `landSupported`).
+- [ ] **Bulk/compliant campaigns** — MVP is deliberately one-text-at-a-
+  time. Bulk outreach needs 10DLC campaign registration + quiet-hours
+  enforcement + suppression lists; don't ship a blaster without those.
+- [ ] **Land comps** — sold-lot comps per zip (the saturation provider
+  already pulls sold-vacant rows; surfacing per-zip medians on the lead
+  table is mostly UI).
+
+---
+
 ## Other candidate work (from Phase 8 handoff, not yet started)
 
 - **Smaller-operator portfolio dataset** — current Denver portfolio is filtered to 100+ units, which misses small syndicators like ALL PRO. Add a lower-threshold variant so sponsor-portfolio auto-linking catches more.

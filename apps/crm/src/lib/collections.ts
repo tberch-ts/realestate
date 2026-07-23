@@ -35,6 +35,21 @@ export const DEAL_STATUS_LABELS: Record<DealStatus, string> = {
   closed: 'Closed',
 }
 
+// Land-wholesaling deals move through a contract-assignment flow, not a
+// financing flow — the user never buys the lot, only assigns the contract.
+export const LAND_DEAL_STATUSES = ['lead', 'offer_sent', 'under_contract', 'assigned', 'closed'] as const
+export type LandDealStatus = (typeof LAND_DEAL_STATUSES)[number]
+
+export const LAND_DEAL_STATUS_LABELS: Record<LandDealStatus, string> = {
+  lead: 'Lead',
+  offer_sent: 'Offer Sent',
+  under_contract: 'Under Contract',
+  assigned: 'Assigned',
+  closed: 'Closed',
+}
+
+export type DealStrategy = 'multifamily' | 'land'
+
 export interface Deal {
   id: string
   ownerId: string
@@ -46,8 +61,18 @@ export interface Deal {
   units?: number
   price?: number
   capRate?: number
-  status: DealStatus
+  // Absent on every pre-land doc = multifamily. Never backfilled.
+  strategy?: DealStrategy
+  status: DealStatus | LandDealStatus
   notes?: string
+  // Land-strategy fields (assignment economics: the user never funds the
+  // purchase — profit is builderPrice − contractPrice at assignment).
+  parcelId?: string
+  lotAcres?: number
+  contractPrice?: number   // what the seller agreed to
+  builderPrice?: number    // what the matched builder buy box pays
+  assignmentFee?: number   // the spread
+  builderBuyBoxId?: string
   createdAt?: unknown
   updatedAt?: unknown
 }
@@ -129,7 +154,7 @@ export interface Contact {
   updatedAt?: unknown
 }
 
-export const INTERACTION_KINDS = ['call', 'email', 'meeting', 'note', 'outreach_sent', 'reply_received'] as const
+export const INTERACTION_KINDS = ['call', 'email', 'meeting', 'note', 'outreach_sent', 'sms_sent', 'reply_received'] as const
 export type InteractionKind = (typeof INTERACTION_KINDS)[number]
 
 export const INTERACTION_KIND_LABELS: Record<InteractionKind, string> = {
@@ -138,6 +163,7 @@ export const INTERACTION_KIND_LABELS: Record<InteractionKind, string> = {
   meeting: 'Meeting',
   note: 'Note',
   outreach_sent: 'Outreach sent',
+  sms_sent: 'Text sent',
   reply_received: 'Reply received',
 }
 
@@ -152,6 +178,41 @@ export interface Interaction {
   body?: string
   occurredAt?: unknown
   createdAt?: unknown
+}
+
+// Stored at builder_buy_boxes/{boxId}. A builder's acquisition criteria for
+// finished lots — the document a builder hands over ("closing terms, desired
+// zip codes, requirements, restrictions"). Land leads are matched against
+// every active box client-side (see lib/landMatch.ts). Same ownerId +
+// members pattern as deals (see firestore.rules).
+export interface BuyBoxZipRow {
+  zip: string
+  minAcres?: number
+  maxAcres?: number
+  minWidthFt?: number
+  utilities?: string       // e.g. "water/sewer at street"
+  price: number            // what the builder pays for a qualifying lot
+  notes?: string
+}
+
+export interface BuilderBuyBox {
+  id: string
+  ownerId: string
+  members?: string[]
+  builderName: string
+  contactId?: string       // optional link to the builder's Contact
+  market?: string          // MarketKey; free string to avoid a shared import here
+  areaLabel?: string       // e.g. "Palm Coast, FL"
+  active: boolean
+  closingTerms: string[]   // free-text lines, mirrors the builder's doc
+  zipRows: BuyBoxZipRow[]
+  requirements: string[]
+  restrictions: string[]
+  // Default assignment fee target: suggested offer = zip-row price − spread.
+  targetSpread?: number
+  notes?: string
+  createdAt?: unknown
+  updatedAt?: unknown
 }
 
 // Mirrors packages/shared's LoiInput + the subset of DealInput actually used

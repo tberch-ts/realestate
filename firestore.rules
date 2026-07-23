@@ -78,6 +78,15 @@ service cloud.firestore {
       }
     }
 
+    // Builder buy boxes (land wholesaling strategy) — the acquisition
+    // criteria a builder hands over, matched against vacant-lot leads.
+    // Same owner/member pattern as deals.
+    match /builder_buy_boxes/{boxId} {
+      allow read, update: if isSignedIn() && (isOwner(resource) || isMember(resource));
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.ownerId;
+      allow delete: if isSignedIn() && isOwner(resource);
+    }
+
     // Shared reference data (e.g. MSA-level market signals) — readable by
     // any signed-in user, writable only via admin custom claim (backend/
     // Cloud Function use, not client writes).

@@ -23,6 +23,11 @@ export const MARKETS: ReadonlyArray<MarketConfig> = [
     neighborhoodsSupported: true,
     followupSupported: true,
     portfolioSupported: true,
+    // Land leads stay off until the general Denver parcel layer (NOT
+    // Middle_Housing_Stock, which is housing-only) is probed for vacant
+    // property-class codes. One-line flip once verified — see
+    // project-docs/data-sources-by-msa.md.
+    landSupported: false,
   },
   {
     key: 'phoenix',
@@ -44,7 +49,8 @@ export const MARKETS: ReadonlyArray<MarketConfig> = [
     neighborhoodsSupported: true,
     followupSupported: false,
     portfolioSupported: false,
-    notes: 'Hotspots live (Phoenix Urban Villages). Follow-up/portfolio pending a working bulk parcel source.',
+    landSupported: false,
+    notes: 'Hotspots live (Phoenix Urban Villages). Follow-up/portfolio/land pending a working bulk parcel source.',
   },
   {
     key: 'austin',
@@ -64,7 +70,10 @@ export const MARKETS: ReadonlyArray<MarketConfig> = [
     neighborhoodsSupported: false,
     followupSupported: false,
     portfolioSupported: false,
-    notes: 'Travis County TNR parcel feed live (no units/sqft/sale price). See project-docs/data-sources-by-msa.md.',
+    // Travis feed has no sale date/price — can't compute ownership length,
+    // which is the land lead finder's key filter.
+    landSupported: false,
+    notes: 'Travis County TNR parcel feed live (no units/sqft/sale price — sale date needed for land leads). See project-docs/data-sources-by-msa.md.',
   },
   {
     key: 'nashville',
@@ -84,7 +93,8 @@ export const MARKETS: ReadonlyArray<MarketConfig> = [
     neighborhoodsSupported: true,
     followupSupported: false,
     portfolioSupported: false,
-    notes: 'Hotspots live (Nashville Community Planning Areas). Follow-up/portfolio pending a working bulk parcel source.',
+    landSupported: false,
+    notes: 'Hotspots live (Nashville Community Planning Areas). Follow-up/portfolio/land pending a working bulk parcel source.',
   },
   {
     key: 'charlotte',
@@ -103,7 +113,8 @@ export const MARKETS: ReadonlyArray<MarketConfig> = [
     neighborhoodsSupported: true,
     followupSupported: false,
     portfolioSupported: false,
-    notes: 'Hotspots live (Charlotte Community Planning Areas). Follow-up/portfolio pending a working bulk parcel source.',
+    landSupported: false,
+    notes: 'Hotspots live (Charlotte Community Planning Areas). Follow-up/portfolio/land pending a working bulk parcel source.',
   },
   {
     key: 'tampa',
@@ -125,7 +136,12 @@ export const MARKETS: ReadonlyArray<MarketConfig> = [
     neighborhoodsSupported: true,
     followupSupported: false,
     portfolioSupported: false,
-    notes: 'Hotspots live (Tampa neighborhood associations). Follow-up/portfolio pending a working bulk parcel source.',
+    // Land leads bypass the dead county host entirely: the Florida DOR
+    // statewide parcel layer (FGIO ArcGIS) has standardized DOR_UC land-use
+    // codes, sale year/price, and owner mailing state. See
+    // hillsboroughLand.ts + project-docs/data-sources-by-msa.md.
+    landSupported: true,
+    notes: 'Hotspots live (Tampa neighborhood associations). Land leads live via FL DOR statewide parcels. Follow-up/portfolio pending a working bulk parcel source.',
   },
   {
     key: 'raleigh',
@@ -143,7 +159,11 @@ export const MARKETS: ReadonlyArray<MarketConfig> = [
     neighborhoodsSupported: true,
     followupSupported: false,
     portfolioSupported: false,
-    notes: 'Hotspots live (Raleigh Citizens Advisory Council areas). Follow-up/portfolio pending owner-rollup work.',
+    // Wake County GIS parcels carry land class, deed acres, sale date/price,
+    // and owner mailing address — everything the land lead finder needs.
+    // See wakeLand.ts + project-docs/data-sources-by-msa.md.
+    landSupported: true,
+    notes: 'Hotspots live (Raleigh Citizens Advisory Council areas). Land leads live via Wake County GIS parcels. Follow-up/portfolio pending owner-rollup work.',
   },
 ];
 
@@ -200,4 +220,10 @@ export function supportedAssessorMarkets(): MarketConfig[] {
 // boundary source yet.
 export function supportedNeighborhoodMarkets(): MarketConfig[] {
   return MARKETS.filter((m) => m.neighborhoodsSupported);
+}
+
+// Markets with a verified vacant-land parcel source (land-use codes + sale
+// dates). Used by the land dispatcher and the Land Leads market picker.
+export function supportedLandMarkets(): MarketConfig[] {
+  return MARKETS.filter((m) => m.landSupported);
 }

@@ -1,5 +1,6 @@
 import type {
-  DealInput, FollowupResult, LoiInput, MarketKey, OwnerCluster, PropertySnapshot, SosEntity,
+  AssignmentContractInput, DealInput, FollowupResult, LandContractInput, LandLeadFilters, LandLeadResult,
+  LoiInput, MarketKey, OwnerCluster, PropertySnapshot, SmsSendInput, SmsSendResult, SosEntity,
 } from '@mfa/shared';
 import { API_URL as BASE } from './runtimeEnv';
 import { auth } from './firebase';
@@ -129,6 +130,81 @@ export async function fetchFollowup(
   const body = await res.json();
   if (body.status !== 'ok') throw new Error(body.message ?? 'Follow-up not available for this market');
   return body.data as FollowupResult;
+}
+
+// ---- Vacant land (land wholesaling strategy) ----
+
+export async function fetchLandLeads(market: MarketKey, filters: LandLeadFilters = {}): Promise<LandLeadResult> {
+  const url = new URL(`${BASE}/api/land/${market}/leads`, typeof window !== 'undefined' ? window.location.origin : undefined);
+  if (filters.zips?.length) url.searchParams.set('zips', filters.zips.join(','));
+  if (filters.city) url.searchParams.set('city', filters.city);
+  if (filters.minAcres != null) url.searchParams.set('minAcres', String(filters.minAcres));
+  if (filters.maxAcres != null) url.searchParams.set('maxAcres', String(filters.maxAcres));
+  if (filters.minYearsHeld != null) url.searchParams.set('minYearsHeld', String(filters.minYearsHeld));
+  if (filters.includeUnknownSaleDate != null) url.searchParams.set('includeUnknownSaleDate', filters.includeUnknownSaleDate ? '1' : '0');
+  if (filters.outOfStateOwner) url.searchParams.set('outOfState', '1');
+  if (filters.outOfCountyOwner) url.searchParams.set('outOfCounty', '1');
+  if (filters.landUseIn?.length) url.searchParams.set('landUse', filters.landUseIn.join(','));
+  if (filters.landUseNotIn?.length) url.searchParams.set('excludeLandUse', filters.landUseNotIn.join(','));
+  if (filters.limit) url.searchParams.set('limit', String(filters.limit));
+  const res = await apiFetch(url);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`API ${res.status}: ${text.slice(0, 120)}`);
+  }
+  const body = await res.json();
+  if (body.status !== 'ok') throw new Error(body.message ?? 'Land leads not available for this market');
+  return body.data as LandLeadResult;
+}
+
+// Same GeoJSON envelope as /api/hotspots — consumed by the saturation map.
+export async function fetchLandSaturationGeoJson(market: MarketKey): Promise<{ type: 'FeatureCollection'; features: unknown[] }> {
+  const res = await apiFetch(`${BASE}/api/land/${market}/saturation`);
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  const body = await res.json();
+  if (body.status !== 'ok') throw new Error(body.message ?? 'Land saturation not available for this market');
+  return body.data;
+}
+
+export async function downloadLandContractPdf(input: LandContractInput): Promise<Blob> {
+  const res = await apiFetch(`${BASE}/api/land/contract`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.message ?? body?.error ?? `API ${res.status}`);
+  }
+  return res.blob();
+}
+
+export async function downloadAssignmentContractPdf(input: AssignmentContractInput): Promise<Blob> {
+  const res = await apiFetch(`${BASE}/api/land/contract/assignment`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.message ?? body?.error ?? `API ${res.status}`);
+  }
+  return res.blob();
+}
+
+// ---- SMS (Twilio) ----
+
+export async function sendSms(input: SmsSendInput): Promise<SmsSendResult> {
+  const res = await apiFetch(`${BASE}/api/sms/send`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok || body?.status === 'needs_credentials' || body?.status === 'error') {
+    throw new Error(body?.message ?? `API ${res.status}`);
+  }
+  return (body.data ?? body) as SmsSendResult;
 }
 
 // ---- SEC EDGAR Form D ----

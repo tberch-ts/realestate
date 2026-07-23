@@ -15,7 +15,7 @@ export default function MarketSelect({
   value: MarketKey;
   onChange: (market: MarketKey) => void;
   /** Which *Supported flag gates enabling an option. */
-  capability: 'neighborhoodsSupported' | 'followupSupported' | 'portfolioSupported';
+  capability: 'neighborhoodsSupported' | 'followupSupported' | 'portfolioSupported' | 'landSupported';
   className?: string;
 }) {
   const { markets, loading } = useMarkets();

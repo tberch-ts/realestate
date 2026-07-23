@@ -91,9 +91,17 @@ export interface MarketConfig {
   neighborhoodsSupported: boolean;
   followupSupported: boolean;
   portfolioSupported: boolean;
+  // Vacant-land lead finder (land wholesaling strategy). Gated per market on
+  // a verified parcel source with land-use codes + sale dates.
+  landSupported: boolean;
   // Short rationale shown on the market-picker / "why is this grayed out?" UI.
   notes?: string;
 }
+
+// ---------- Strategy ----------
+// The app supports multiple acquisition strategies. Each strategy gets its
+// own nav section + playbook; existing multifamily features are untouched.
+export type StrategyKey = 'multifamily' | 'land';
 
 export interface CensusRecord {
   tract?: string;
@@ -389,6 +397,134 @@ export interface OwnerCluster {
   totalUnits: number;
   avgYearBuilt?: number;
   properties: FollowupScored[];
+}
+
+// ---------- Vacant land leads (land wholesaling) ----------
+
+export interface LandParcel {
+  parcelId?: string;
+  // Situs address is frequently blank on raw lots — zip/legal fallback.
+  address?: string;
+  zip?: string;
+  city?: string;
+  owner?: string;
+  // Full mailing address line(s) when the source exposes them — this is
+  // where a letter actually reaches the owner (situs is an empty lot).
+  ownerMailingAddress?: string;
+  ownerMailingState?: string;
+  // Only set when the parcel source exposes a mailing county/city we can
+  // compare against the market's own; undefined = unknown.
+  outOfCountyOwner?: boolean;
+  lotSqft?: number;
+  lotAcres?: number;
+  landUseCode?: string;         // raw county land-use / DOR code
+  landUseLabel?: string;        // normalized human label
+  salePrice?: number;
+  saleDate?: string;            // ISO; undefined = no recorded sale (long hold)
+  assessedValue?: number;
+  centroid: [number, number];   // [lng, lat]
+}
+
+export interface LandLeadFilters {
+  zips?: string[];
+  city?: string;
+  minAcres?: number;
+  maxAcres?: number;
+  // KEY filter: target owners who have held for a long time; recent
+  // purchasers are excluded. Server default is 10 when absent.
+  minYearsHeld?: number;
+  // Parcels with no recorded sale are usually the longest holds — include
+  // them by default, flagged with a reason chip rather than dropped.
+  includeUnknownSaleDate?: boolean;
+  outOfStateOwner?: boolean;
+  outOfCountyOwner?: boolean;
+  landUseIn?: string[];         // normalized labels, e.g. 'vacant_residential'
+  landUseNotIn?: string[];
+  limit?: number;               // capped server-side at 500
+}
+
+export interface LandLeadScored extends LandParcel {
+  score: number;                // 0-100 contact-priority composite
+  signals: {
+    yearsHeld?: number;
+    ownerType: OwnerType;
+    outOfStateOwner?: boolean;
+    outOfCountyOwner?: boolean;
+  };
+  reasons: string[];            // short human-readable reasons
+}
+
+export interface LandLeadResult {
+  market: MarketKey;
+  count: number;
+  filters: LandLeadFilters;     // echo of the filters actually applied
+  leads: LandLeadScored[];
+}
+
+// Per-zone properties on the land-saturation choropleth. The endpoint
+// returns a GeoJSON FeatureCollection<Polygon, LandSaturationZoneProps> —
+// same envelope as hotspots so the map rendering code is shared.
+export interface LandSaturationZoneProps {
+  name: string;
+  score: number;                // 0-100 builder-activity score
+  soldLots12mo: number;
+  newConstruction24mo: number;
+  medianLotSalePrice?: number;
+}
+
+// ---------- SMS (Twilio) ----------
+
+export interface SmsSendInput {
+  to: string;                   // E.164
+  body: string;
+  contactId?: string;           // CRM contact to log the send against
+}
+
+export interface SmsSendResult {
+  sid: string;
+  status: string;
+  to: string;
+  from: string;
+}
+
+// ---------- Land purchase contract (1-page P&S agreement) ----------
+
+export interface LandContractInput {
+  sellerNames: string;          // "Jane Doe and John Doe"
+  buyerName: string;            // rendered as "<buyerName>, Buyer and/or assigns"
+  address?: string;
+  parcelId?: string;
+  legalDescription?: string;
+  purchasePrice: number;
+  feasibilityDays: number;      // feasibility-study period (default 30)
+  closingAgentName: string;
+  closingAgentAddress?: string;
+  earnestMoney: number;         // may be 0; held at the closing agent's office
+  effectiveDate: string;        // ISO
+  closingDate?: string;         // ISO, optional
+  specialTerms?: string;
+}
+
+// The buyer-side contract: assigns the P&S agreement to the builder for
+// the assignment fee, paid through the closing agent (title company) at
+// closing. Together with LandContractInput this completes the flip:
+// seller contract + buyer assignment, both held in escrow by the title
+// company.
+export interface AssignmentContractInput {
+  assignorName: string;         // you (the original "Buyer and/or assigns")
+  assigneeName: string;         // the builder taking the contract
+  sellerNames: string;          // seller(s) on the original agreement
+  originalAgreementDate: string; // ISO — effective date of the P&S
+  address?: string;
+  parcelId?: string;
+  legalDescription?: string;
+  originalPrice: number;        // contract price owed to the seller
+  assignmentFee: number;        // your spread, paid at closing
+  closingAgentName: string;     // title company protecting both contracts
+  closingAgentAddress?: string;
+  effectiveDate: string;        // ISO
+  closingDate?: string;         // ISO, optional
+  specialTerms?: string;
 }
 
 // ---------- Colorado SOS ----------

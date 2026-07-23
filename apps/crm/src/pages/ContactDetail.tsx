@@ -3,10 +3,11 @@ import { useNavigate, useParams } from 'react-router-dom'
 import {
   addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where,
 } from 'firebase/firestore'
-import { Mail, Send, Trash2 } from 'lucide-react'
+import { Mail, MessageSquareText, Send, Trash2 } from 'lucide-react'
 import { db } from '../lib/firebase'
 import { useAuth } from '../context/AuthContext'
 import { sendPostgridLetter } from '../lib/api'
+import SmsComposer from '../components/SmsComposer'
 import {
   CONTACT_KINDS, INTERACTION_KINDS, INTERACTION_KIND_LABELS,
   type Contact, type Interaction, type UserProfile,
@@ -23,6 +24,7 @@ export default function ContactDetail() {
   const [notFound, setNotFound] = useState(false)
   const [interactions, setInteractions] = useState<Interaction[]>([])
   const [sender, setSender] = useState<UserProfile['postgridSender']>()
+  const [showSms, setShowSms] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -117,6 +119,31 @@ export default function ContactDetail() {
           contact instead of carrying over a stale draft if the route param
           changes without a full remount. */}
       <OutreachComposer key={contact.id} contact={contact} sender={sender} onLogged={logInteraction} />
+
+      <Section title="Text message">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowSms(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-600 hover:bg-emerald-500 transition-colors"
+          >
+            <MessageSquareText size={14} /> Text via Twilio
+          </button>
+          <span className="text-xs text-gray-500">
+            {contact.phone ? `Sends to ${contact.phone}` : 'No phone yet — add it in the composer (parcel data has no phones).'}
+          </span>
+        </div>
+      </Section>
+
+      {showSms && (
+        <SmsComposer
+          contact={contact}
+          onSaved={(phoneE164) => handleChange('phone', phoneE164)}
+          onSent={(to, body) =>
+            logInteraction({ kind: 'sms_sent', subject: `Text to ${to}`, body })
+          }
+          onClose={() => setShowSms(false)}
+        />
+      )}
 
       <ManualLogForm onLog={logInteraction} />
 
