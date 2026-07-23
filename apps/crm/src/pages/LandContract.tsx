@@ -1,10 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { FileSignature, Landmark, Mail, ShieldAlert } from 'lucide-react'
+import { doc, onSnapshot } from 'firebase/firestore'
+import { FileSignature, Landmark, Mail, MailCheck, ShieldAlert } from 'lucide-react'
 import type { AssignmentContractInput, LandContractInput } from '@mfa/shared'
-import { downloadAssignmentContractPdf, downloadLandContractPdf } from '../lib/api'
+import { downloadAssignmentContractPdf, downloadLandContractPdf, sendPostgridLetter } from '../lib/api'
 import { builderAssignmentEmail, sellerContractEmail, titleCompanyEmail } from '../lib/contractEmail'
 import { useAuth } from '../context/AuthContext'
+import { db } from '../lib/firebase'
+import type { UserProfile } from '../lib/collections'
 
 // Both contracts of the flip, plus the escrow flow that protects them:
 //   1. Seller P&S — you sign as "Buyer and/or assigns", feasibility +
@@ -25,6 +28,12 @@ export default function LandContract() {
   const [params] = useSearchParams()
   const { user } = useAuth()
   const [tab, setTab] = useState<Tab>((params.get('tab') as Tab) || 'seller')
+  const [sender, setSender] = useState<UserProfile['postgridSender']>()
+
+  useEffect(() => {
+    if (!user) return
+    return onSnapshot(doc(db, 'users', user.uid), (snap) => setSender((snap.data() as UserProfile | undefined)?.postgridSender))
+  }, [user])
 
   // ---- shared across both contracts ----
   const [buyerName, setBuyerName] = useState(user?.displayName ?? '')
@@ -43,15 +52,29 @@ export default function LandContract() {
   const [closingDate, setClosingDate] = useState('')
   const [specialTerms, setSpecialTerms] = useState('')
   const [sellerEmail, setSellerEmail] = useState('')
+  const [sellerAddressLine1, setSellerAddressLine1] = useState('')
+  const [sellerCity, setSellerCity] = useState('')
+  const [sellerState, setSellerState] = useState('')
+  const [sellerZip, setSellerZip] = useState('')
 
   // ---- assignment ----
   const [builderName, setBuilderName] = useState(params.get('builder') ?? '')
   const [builderEmail, setBuilderEmail] = useState('')
   const [assignmentFee, setAssignmentFee] = useState(params.get('fee') ?? '')
   const [agreementDate, setAgreementDate] = useState(new Date().toISOString().slice(0, 10))
+  const [builderAddressLine1, setBuilderAddressLine1] = useState('')
+  const [builderCity, setBuilderCity] = useState('')
+  const [builderState, setBuilderState] = useState('')
+  const [builderZip, setBuilderZip] = useState('')
 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [mailingSeller, setMailingSeller] = useState(false)
+  const [mailSellerError, setMailSellerError] = useState<string | null>(null)
+  const [mailSellerResult, setMailSellerResult] = useState<string | null>(null)
+  const [mailingAssignment, setMailingAssignment] = useState(false)
+  const [mailAssignmentError, setMailAssignmentError] = useState<string | null>(null)
+  const [mailAssignmentResult, setMailAssignmentResult] = useState<string | null>(null)
 
   const emailCtx = {
     address: address.trim() || undefined,
@@ -116,6 +139,105 @@ export default function LandContract() {
       setError((err as Error).message)
     } finally {
       setBusy(false)
+    }
+  }
+
+  const canMailSeller = !!sender?.addressLine1 && !!sellerAddressLine1.trim() && !!sellerCity.trim() && !!sellerState.trim() && !!sellerZip.trim()
+  const canMailAssignment = !!sender?.addressLine1 && !!builderAddressLine1.trim() && !!builderCity.trim() && !!builderState.trim() && !!builderZip.trim()
+
+  async function handleMailSeller() {
+    if (!sender?.addressLine1 || !canMailSeller) return
+    setMailingSeller(true)
+    setMailSellerError(null)
+    setMailSellerResult(null)
+    try {
+      const input: LandContractInput = {
+        sellerNames: sellerNames.trim(),
+        buyerName: buyerName.trim(),
+        address: address.trim() || undefined,
+        parcelId: parcelId.trim() || undefined,
+        legalDescription: legalDescription.trim() || undefined,
+        purchasePrice: Number(purchasePrice),
+        feasibilityDays: Number(feasibilityDays) || 30,
+        closingAgentName: closingAgentName.trim(),
+        closingAgentAddress: closingAgentAddress.trim() || undefined,
+        earnestMoney: Number(earnestMoney) || 0,
+        effectiveDate: new Date().toISOString().slice(0, 10),
+        closingDate: closingDate || undefined,
+        specialTerms: specialTerms.trim() || undefined,
+      }
+      const result = await sendPostgridLetter({
+        to: {
+          companyName: sellerNames.trim(),
+          addressLine1: sellerAddressLine1.trim(),
+          city: sellerCity.trim(),
+          provinceOrState: sellerState.trim(),
+          postalOrZip: sellerZip.trim(),
+        },
+        from: {
+          companyName: sender.companyName,
+          addressLine1: sender.addressLine1!,
+          addressLine2: sender.addressLine2,
+          city: sender.city!,
+          provinceOrState: sender.stateCode!,
+          postalOrZip: sender.zip!,
+        },
+        landContract: input,
+        subject: `Purchase agreement for ${address.trim() || sellerNames.trim()}`,
+      })
+      setMailSellerResult(`Mailed — status: ${result.status} (${result.live ? 'LIVE' : 'TEST'})`)
+    } catch (err) {
+      setMailSellerError((err as Error).message)
+    } finally {
+      setMailingSeller(false)
+    }
+  }
+
+  async function handleMailAssignment() {
+    if (!sender?.addressLine1 || !canMailAssignment) return
+    setMailingAssignment(true)
+    setMailAssignmentError(null)
+    setMailAssignmentResult(null)
+    try {
+      const input: AssignmentContractInput = {
+        assignorName: buyerName.trim(),
+        assigneeName: builderName.trim(),
+        sellerNames: sellerNames.trim(),
+        originalAgreementDate: agreementDate,
+        address: address.trim() || undefined,
+        parcelId: parcelId.trim() || undefined,
+        legalDescription: legalDescription.trim() || undefined,
+        originalPrice: Number(purchasePrice),
+        assignmentFee: Number(assignmentFee),
+        closingAgentName: closingAgentName.trim(),
+        closingAgentAddress: closingAgentAddress.trim() || undefined,
+        effectiveDate: new Date().toISOString().slice(0, 10),
+        closingDate: closingDate || undefined,
+      }
+      const result = await sendPostgridLetter({
+        to: {
+          companyName: builderName.trim(),
+          addressLine1: builderAddressLine1.trim(),
+          city: builderCity.trim(),
+          provinceOrState: builderState.trim(),
+          postalOrZip: builderZip.trim(),
+        },
+        from: {
+          companyName: sender.companyName,
+          addressLine1: sender.addressLine1!,
+          addressLine2: sender.addressLine2,
+          city: sender.city!,
+          provinceOrState: sender.stateCode!,
+          postalOrZip: sender.zip!,
+        },
+        assignmentContract: input,
+        subject: `Assignment of contract for ${address.trim() || sellerNames.trim()}`,
+      })
+      setMailAssignmentResult(`Mailed — status: ${result.status} (${result.live ? 'LIVE' : 'TEST'})`)
+    } catch (err) {
+      setMailAssignmentError((err as Error).message)
+    } finally {
+      setMailingAssignment(false)
     }
   }
 
@@ -211,7 +333,20 @@ export default function LandContract() {
             <input type="email" className={INPUT} style={bd} value={sellerEmail} onChange={(e) => setSellerEmail(e.target.value)} placeholder="jane@example.com" />
           </Field>
 
+          <div>
+            <p className="text-xs text-gray-500 mb-2">Seller mailing address (required to mail via PostGrid)</p>
+            <div className="grid grid-cols-4 gap-3">
+              <div className="col-span-4">
+                <input className={INPUT} style={bd} value={sellerAddressLine1} onChange={(e) => setSellerAddressLine1(e.target.value)} placeholder="Street address" />
+              </div>
+              <input className={INPUT} style={bd} value={sellerCity} onChange={(e) => setSellerCity(e.target.value)} placeholder="City" />
+              <input className={INPUT} style={bd} value={sellerState} onChange={(e) => setSellerState(e.target.value)} placeholder="State" />
+              <input className={INPUT} style={bd} value={sellerZip} onChange={(e) => setSellerZip(e.target.value)} placeholder="ZIP" />
+            </div>
+          </div>
+
           {error && <ErrorBox msg={error} />}
+          {mailSellerError && <ErrorBox msg={mailSellerError} />}
 
           <div className="flex flex-wrap items-center gap-3">
             <button
@@ -220,6 +355,15 @@ export default function LandContract() {
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 hover:bg-blue-500 transition-colors disabled:opacity-50"
             >
               <FileSignature size={15} /> {busy ? 'Generating…' : 'Generate P&S PDF'}
+            </button>
+            <button
+              onClick={handleMailSeller}
+              disabled={mailingSeller || !canMailSeller || !sellerNames.trim() || !buyerName.trim() || !purchasePrice || !closingAgentName.trim()}
+              title={!canMailSeller ? 'Enter the seller’s mailing address, and set your sender address in Settings' : undefined}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm border text-gray-200 hover:bg-white/5 transition-colors disabled:opacity-50"
+              style={bd}
+            >
+              <MailCheck size={14} /> {mailingSeller ? 'Sending…' : 'Mail via PostGrid'}
             </button>
             {sellerEmail.trim() && (
               <a
@@ -231,8 +375,10 @@ export default function LandContract() {
               </a>
             )}
           </div>
+          {mailSellerResult && <p className="text-xs text-emerald-400">{mailSellerResult}</p>}
           <p className="text-[11px] text-gray-600">
-            Generate first, then email — your mail app opens pre-written; attach the downloaded PDF.
+            Generate first, then email — your mail app opens pre-written; attach the downloaded PDF. Or mail the
+            signed PDF directly via PostGrid using the address above.
           </p>
         </div>
       ) : (
@@ -263,7 +409,20 @@ export default function LandContract() {
             </div>
           )}
 
+          <div>
+            <p className="text-xs text-gray-500 mb-2">Builder mailing address (required to mail via PostGrid)</p>
+            <div className="grid grid-cols-4 gap-3">
+              <div className="col-span-4">
+                <input className={INPUT} style={bd} value={builderAddressLine1} onChange={(e) => setBuilderAddressLine1(e.target.value)} placeholder="Street address" />
+              </div>
+              <input className={INPUT} style={bd} value={builderCity} onChange={(e) => setBuilderCity(e.target.value)} placeholder="City" />
+              <input className={INPUT} style={bd} value={builderState} onChange={(e) => setBuilderState(e.target.value)} placeholder="State" />
+              <input className={INPUT} style={bd} value={builderZip} onChange={(e) => setBuilderZip(e.target.value)} placeholder="ZIP" />
+            </div>
+          </div>
+
           {error && <ErrorBox msg={error} />}
+          {mailAssignmentError && <ErrorBox msg={mailAssignmentError} />}
 
           <div className="flex flex-wrap items-center gap-3">
             <button
@@ -272,6 +431,15 @@ export default function LandContract() {
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 hover:bg-blue-500 transition-colors disabled:opacity-50"
             >
               <FileSignature size={15} /> {busy ? 'Generating…' : 'Generate assignment PDF'}
+            </button>
+            <button
+              onClick={handleMailAssignment}
+              disabled={mailingAssignment || !canMailAssignment || !builderName.trim() || !buyerName.trim() || !sellerNames.trim() || !purchasePrice || !assignmentFee || !closingAgentName.trim()}
+              title={!canMailAssignment ? 'Enter the builder’s mailing address, and set your sender address in Settings' : undefined}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm border text-gray-200 hover:bg-white/5 transition-colors disabled:opacity-50"
+              style={bd}
+            >
+              <MailCheck size={14} /> {mailingAssignment ? 'Sending…' : 'Mail via PostGrid'}
             </button>
             {builderEmail.trim() && (
               <a
@@ -283,8 +451,10 @@ export default function LandContract() {
               </a>
             )}
           </div>
+          {mailAssignmentResult && <p className="text-xs text-emerald-400">{mailAssignmentResult}</p>}
           <p className="text-[11px] text-gray-600">
-            Generate first, then email — your mail app opens pre-written; attach the downloaded PDF.
+            Generate first, then email — your mail app opens pre-written; attach the downloaded PDF. Or mail the
+            signed PDF directly via PostGrid using the address above.
           </p>
         </div>
       )}
