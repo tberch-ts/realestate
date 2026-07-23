@@ -1,5 +1,4 @@
 import { Router, urlencoded } from 'express';
-import { getFirestore } from 'firebase-admin/firestore';
 import type { SmsSendInput } from '@mfa/shared';
 import { sendSms, twilioConfigured, validateTwilioSignature } from '../providers/twilioClient.js';
 import { getAdminApp } from '../middleware/firebaseAuth.js';
@@ -69,6 +68,13 @@ smsInboundRouter.post('/inbound', urlencoded({ extended: false }), async (req, r
   try {
     const app = getAdminApp();
     if (app && from) {
+      // Lazily loaded: firebase-admin/firestore pulls in the optional
+      // @google-cloud/firestore package. Importing it at module load would
+      // crash the entire API on boot if that optional dep is ever missing
+      // from the install (see infra/Dockerfile.api.prod). Only the inbound
+      // webhook needs it, so load it here and let a missing module degrade
+      // this one handler instead of taking down the server.
+      const { getFirestore } = await import('firebase-admin/firestore');
       const db = getFirestore(app);
       const snap = await db.collection('contacts').where('phone', '==', from).get();
       const now = new Date();
