@@ -14,6 +14,7 @@ import { loiRouter } from './routes/loi.js';
 import { loiDraftsRouter } from './routes/loiDrafts.js';
 import { hotspotsRouter } from './routes/hotspots.js';
 import { followupRouter } from './routes/followup.js';
+import { landRouter } from './routes/land.js';
 import { portfolioRouter } from './routes/portfolio.js';
 import { sosRouter } from './routes/sos.js';
 import { marketsRouter } from './routes/markets.js';
@@ -21,6 +22,7 @@ import { filingsRouter } from './routes/filings.js';
 import { crmRouter } from './routes/crm.js';
 import { postgridRouter } from './routes/postgrid.js';
 import { stripeWebhooksRouter } from './routes/stripeWebhooks.js';
+import { smsRouter, smsInboundRouter } from './routes/sms.js';
 import { billingRouter } from './routes/billing.js';
 import { invoicesRouter } from './routes/invoices.js';
 import { terminalRouter } from './routes/terminal.js';
@@ -70,6 +72,11 @@ app.use(
 // gate — Stripe calls this endpoint directly, not through a signed-in user.
 app.use('/api/webhooks', stripeWebhooksRouter);
 
+// Twilio inbound SMS webhook — like Stripe's, it's called by Twilio (not a
+// signed-in user), so it mounts before the auth gate. Authenticity comes
+// from X-Twilio-Signature validation inside the route.
+app.use('/api/sms', smsInboundRouter);
+
 app.use(express.json({ limit: '1mb' }));
 
 app.get('/health', (_req, res) => {
@@ -110,12 +117,14 @@ app.use('/api/loi/drafts', loiDraftsRouter);
 app.use('/api/loi', loiRouter);
 app.use('/api/hotspots', hotspotsRouter);
 app.use('/api/followup', followupRouter);
+app.use('/api/land', landRouter);
 app.use('/api/portfolio', portfolioRouter);
 app.use('/api/sos', sosRouter);
 app.use('/api/markets', marketsRouter);
 app.use('/api/filings', filingsRouter);
 app.use('/api/crm', crmRouter);
 app.use('/api/postgrid', postgridRouter);
+app.use('/api/sms', smsRouter);
 app.use('/api/billing', billingRouter);
 app.use('/api/invoices', invoicesRouter);
 app.use('/api/terminal', terminalRouter);
