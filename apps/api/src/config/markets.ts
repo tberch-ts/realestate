@@ -41,16 +41,16 @@ export const MARKETS: ReadonlyArray<MarketConfig> = [
     // the SoS — wrapped in a separate provider (arizonaSos.ts). Stub today.
     sosSupported: false,
     // Hotspots choropleth is live: 15 Urban Villages (City of Phoenix Open
-    // Data ArcGIS) + national Census ACS scoring. Follow-up/portfolio stay
-    // off — the Maricopa bulk parcel layer we'd need for owner rollups has
-    // no unit-count field and its previously-documented FeatureServer URL
-    // no longer resolves (verified while building this out). See
-    // project-docs/data-sources-by-msa.md.
+    // Data ArcGIS) + national Census ACS scoring. Follow-up is live via the
+    // Maricopa Parcel_Data_View layer (same endpoint as phoenixAssessor.ts),
+    // multifamily filtered on PropertyUseDescription; no per-parcel unit
+    // count on this layer, so follow-up rows show units as unknown. Portfolio
+    // (owner rollups) still pending. See project-docs/data-sources-by-msa.md.
     neighborhoodsSupported: true,
-    followupSupported: false,
+    followupSupported: true,
     portfolioSupported: false,
     landSupported: false,
-    notes: 'Hotspots live (Phoenix Urban Villages). Follow-up/portfolio/land pending a working bulk parcel source.',
+    notes: 'Hotspots + follow-up live (Phoenix Urban Villages; Maricopa parcels, no unit count). Portfolio/land pending.',
   },
   {
     key: 'austin',
@@ -67,13 +67,19 @@ export const MARKETS: ReadonlyArray<MarketConfig> = [
     // built, lot size, and property class are real and live.
     assessorSupported: true,
     sosSupported: false,
+    // Follow-up needs a neighborhood polygon to scope the query AND a sale
+    // date for hold-time scoring — Austin has neither: no hotspot boundary
+    // layer wired yet, and Texas is a non-disclosure state so the Travis
+    // feed carries no sale date/price. Both are hard blocks, so follow-up
+    // (and neighborhoods, land) stay off until a boundary layer is added and
+    // a sale-bearing source is found. Assessor single-address lookup works.
     neighborhoodsSupported: false,
     followupSupported: false,
     portfolioSupported: false,
     // Travis feed has no sale date/price — can't compute ownership length,
     // which is the land lead finder's key filter.
     landSupported: false,
-    notes: 'Travis County TNR parcel feed live (no units/sqft/sale price — sale date needed for land leads). See project-docs/data-sources-by-msa.md.',
+    notes: 'Assessor lookup live (Travis County TNR parcels). Hotspots/follow-up/land pending — no neighborhood boundary layer and no sale date (TX non-disclosure).',
   },
   {
     key: 'nashville',
@@ -85,16 +91,17 @@ export const MARKETS: ReadonlyArray<MarketConfig> = [
     assessorSupported: true,
     sosSupported: false,
     // Hotspots choropleth is live: 14 Community Planning Areas (Metro
-    // Nashville GIS) + national Census ACS scoring. Follow-up/portfolio
-    // stay off — nashvilleAssessor.ts's parcel FeatureServer
-    // (Cadastral/Parcels_SP) 404s as of this writing (verified while
-    // building this out); needs re-pointing before bulk owner-rollup
-    // queries can work. See project-docs/data-sources-by-msa.md.
+    // Nashville GIS) + national Census ACS scoring. Follow-up is live via
+    // the Cadastral/Parcels layer (same endpoint as nashvilleAssessor.ts),
+    // multifamily filtered on LUDesc; this layer has no year-built or
+    // unit-count columns, so those show as unknown on follow-up rows.
+    // Portfolio (owner rollups) still pending. See
+    // project-docs/data-sources-by-msa.md.
     neighborhoodsSupported: true,
-    followupSupported: false,
+    followupSupported: true,
     portfolioSupported: false,
     landSupported: false,
-    notes: 'Hotspots live (Nashville Community Planning Areas). Follow-up/portfolio/land pending a working bulk parcel source.',
+    notes: 'Hotspots + follow-up live (Nashville Community Planning Areas; Davidson parcels, no year/unit count). Portfolio/land pending.',
   },
   {
     key: 'charlotte',
@@ -106,15 +113,16 @@ export const MARKETS: ReadonlyArray<MarketConfig> = [
     assessorSupported: true,
     sosSupported: false,
     // Hotspots choropleth is live: 15 Community Planning Areas (City of
-    // Charlotte GIS) + national Census ACS scoring. Follow-up/portfolio
-    // stay off — charlotteAssessor.ts's parcel FeatureServer
-    // (meckgis.mecklenburgcountync.gov) 404s as of this writing (verified
-    // while building this out). See project-docs/data-sources-by-msa.md.
+    // Charlotte GIS) + national Census ACS scoring. Follow-up is live via
+    // the TaxParcel_camadata layer (same endpoint as charlotteAssessor.ts),
+    // multifamily filtered on landuse_description, with real resunits/
+    // yearbuilt/saledate/owner-state. Portfolio (owner rollups) still
+    // pending. See project-docs/data-sources-by-msa.md.
     neighborhoodsSupported: true,
-    followupSupported: false,
+    followupSupported: true,
     portfolioSupported: false,
     landSupported: false,
-    notes: 'Hotspots live (Charlotte Community Planning Areas). Follow-up/portfolio/land pending a working bulk parcel source.',
+    notes: 'Hotspots + follow-up live (Charlotte Community Planning Areas; Mecklenburg parcels). Portfolio/land pending.',
   },
   {
     key: 'tampa',
@@ -128,20 +136,21 @@ export const MARKETS: ReadonlyArray<MarketConfig> = [
     // scraper for. See floridaSos.ts.
     sosSupported: true,
     // Hotspots choropleth is live: 107 active neighborhood associations
-    // (City of Tampa Open Data) + national Census ACS scoring. Follow-up/
-    // portfolio stay off — tampaAssessor.ts's parcel host
-    // (maps.hcpafl.org) has been replaced by an unrelated single-page app
-    // with no REST API surface left (verified while building this out).
-    // See project-docs/data-sources-by-msa.md.
+    // (City of Tampa Open Data) + national Census ACS scoring. Follow-up is
+    // live via the Parcels/TaxParcel layer (same City-of-Tampa endpoint as
+    // tampaAssessor.ts, which republishes the full Hillsborough roll),
+    // multifamily filtered on FL DOR use codes 0300/0800; no unit-count
+    // column, so units show as unknown. Portfolio (owner rollups) still
+    // pending. See project-docs/data-sources-by-msa.md.
     neighborhoodsSupported: true,
-    followupSupported: false,
+    followupSupported: true,
     portfolioSupported: false,
     // Land leads bypass the dead county host entirely: the Florida DOR
     // statewide parcel layer (FGIO ArcGIS) has standardized DOR_UC land-use
     // codes, sale year/price, and owner mailing state. See
     // hillsboroughLand.ts + project-docs/data-sources-by-msa.md.
     landSupported: true,
-    notes: 'Hotspots live (Tampa neighborhood associations). Land leads live via FL DOR statewide parcels. Follow-up/portfolio pending a working bulk parcel source.',
+    notes: 'Hotspots + follow-up live (Tampa neighborhood associations; Hillsborough parcels, no unit count). Land leads live via FL DOR statewide parcels. Portfolio pending.',
   },
   {
     key: 'raleigh',
@@ -154,16 +163,19 @@ export const MARKETS: ReadonlyArray<MarketConfig> = [
     sosSupported: false,
     // Hotspots choropleth is live: 18 Citizens Advisory Council (CAC)
     // areas (City of Raleigh GIS, maps.raleighnc.gov) + national Census
-    // ACS scoring. Follow-up/portfolio stay off pending owner-rollup
-    // work. See project-docs/data-sources-by-msa.md.
+    // ACS scoring. Follow-up is live via the Property/Property layer (same
+    // endpoint as raleighAssessor.ts), apartment-use filtered with real
+    // TOTUNITS/YEAR_BUILT/sale data (owner state parsed from the mailing
+    // lines). Portfolio (owner rollups) still pending. See
+    // project-docs/data-sources-by-msa.md.
     neighborhoodsSupported: true,
-    followupSupported: false,
+    followupSupported: true,
     portfolioSupported: false,
     // Wake County GIS parcels carry land class, deed acres, sale date/price,
     // and owner mailing address — everything the land lead finder needs.
     // See wakeLand.ts + project-docs/data-sources-by-msa.md.
     landSupported: true,
-    notes: 'Hotspots live (Raleigh Citizens Advisory Council areas). Land leads live via Wake County GIS parcels. Follow-up/portfolio pending owner-rollup work.',
+    notes: 'Hotspots + follow-up live (Raleigh Citizens Advisory Council areas; Wake parcels). Land leads live via Wake County GIS parcels. Portfolio pending owner-rollup work.',
   },
 ];
 

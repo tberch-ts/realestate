@@ -27,12 +27,12 @@
 | MSA | State | County | Assessor | SoS | Neighborhoods | Follow-up | Portfolio | Land |
 |---|---|---|---|---|---|---|---|---|
 | Denver | CO | Denver | ok | ok | ok | ok | ok | deferred |
-| Phoenix | AZ | Maricopa | ok | not_available | ok | deferred | deferred | deferred |
-| Austin | TX | Travis | ok | needs_credentials | deferred | deferred | deferred | blocked |
-| Nashville | TN | Davidson | ok | not_available | ok | deferred | deferred | deferred |
-| Charlotte | NC | Mecklenburg | ok | not_available | ok | deferred | deferred | deferred |
-| Tampa | FL | Hillsborough | ok | ok | ok | deferred | deferred | ok |
-| Raleigh | NC | Wake | ok | not_available | deferred | deferred | deferred | ok |
+| Phoenix | AZ | Maricopa | ok | not_available | ok | ok | deferred | deferred |
+| Austin | TX | Travis | ok | needs_credentials | deferred | blocked | deferred | blocked |
+| Nashville | TN | Davidson | ok | not_available | ok | ok | deferred | deferred |
+| Charlotte | NC | Mecklenburg | ok | not_available | ok | ok | deferred | deferred |
+| Tampa | FL | Hillsborough | ok | ok | ok | ok | deferred | ok |
+| Raleigh | NC | Wake | ok | not_available | ok | ok | deferred | ok |
 
 `deferred` = the per-MSA provider isn't implemented yet but the data
 source has been scoped (see each MSA section). Frontend gates those
@@ -578,28 +578,70 @@ because the Census/scoring half is now a single shared engine
 (`neighborhoods.ts`) and the per-market half is just a ~10-line config
 entry (`neighborhoodSources.ts`) once you've found the boundary layer.
 
-Follow-up and Portfolio remain deferred for every non-Denver market:
+**Follow-up is now live for Phoenix, Nashville, Charlotte, Tampa, and
+Raleigh** — see "Follow-up — verification notes" below. Only Portfolio
+remains deferred across the non-Denver markets:
 
-- **Follow-up:** assessor group-by-owner query pulling parcels held
-  10+ years with out-of-state mailing addresses. The query shape is
-  portable — the per-MSA work is field-name mapping and mailing
-  address extraction. Blocked on the assessor FeatureServer drift noted
-  above (Phoenix/Nashville/Charlotte/Tampa all need their endpoint
-  re-verified or re-pointed first — and Phoenix's current schema has no
-  unit-count field at all).
 - **Portfolio:** reverse index over the assessor — owner → parcels.
   Same group-by pattern; the per-MSA piece is UI-surface owner-name
   normalization (Maricopa uses `OwnerName`, Mecklenburg uses `ownrlstnme`,
   Wake uses `OWNER`, Hillsborough uses `OWNER`, Davidson uses `Owner`,
   Austin uses `py_owner_name`).
 
-Priority order once portfolio/follow-up land: **Phoenix → Tampa →
-Nashville → Charlotte → Raleigh → Austin**, matching buy-box pipeline
-value. Every market's assessor is now live (see per-MSA sections
-above) and Raleigh's neighborhoods boundary source has also been
-found and verified — see "Neighborhood polygon layers" below.
-Follow-up/portfolio remain the only deferred pieces across all 6
-non-Denver markets.
+**Austin follow-up is hard-blocked**, not merely deferred: it has no
+neighborhood boundary layer to scope the query, and Texas is a
+non-disclosure state so the Travis feed has no sale date for hold-time
+scoring. It stays off until a boundary layer is wired and a sale-bearing
+source is found.
+
+---
+
+## Follow-up — verification notes
+
+Added 2026-07-22. Follow-up used to be Denver-only (`denverFollowup.ts`,
+against the purpose-built `Middle_Housing_Stock` layer with a real unit
+count). It's now generalized: `genericFollowup.ts` pulls the selected
+neighborhood polygon from the (already-cached) Hotspots GeoJSON, spatial-
+intersects it against the market's **existing county assessor parcel
+layer** (the same endpoint each `*Assessor.ts` uses for single-address
+lookups), filtered to multifamily parcels, then maps + scores rows with
+the shared `followupScoring.ts` (hold-time > owner-type > out-of-state).
+Config per market lives in `followupSources.ts`.
+
+A market qualifies for follow-up when its parcel layer has (a) a way to
+identify multifamily parcels (unit count OR a land-use/use code), (b) an
+owner name, and (c) a neighborhood polygon source in
+`neighborhoodSources.ts`. Sale date + owner mailing state feed scoring
+where present, undefined where the layer lacks them.
+
+Every filter below was curl-verified live 2026-07-22 (`returnCountOnly`
+for the multifamily WHERE, plus a spatial-intersect against a real
+neighborhood polygon returning mapped candidate rows).
+
+| Market | Parcel layer (= assessor endpoint) | Multifamily filter | Unit count | Year | Owner mail state |
+|---|---|---|---|---|---|
+| Phoenix | `Parcel_Data_View` FS/0 | `PropertyUseDescription LIKE '%APARTMENT%'` | — (none on layer) | `ConstructionYear` | `OwnerState` |
+| Nashville | `Cadastral/Parcels` MS/0 | `LUDesc LIKE '%APARTMENT%'` | — | — (none) | `OwnState` |
+| Charlotte | `TaxParcel_camadata` FS/0 | `landuse_description LIKE '%MULTI%'` | `resunits` | `yearbuilt` | `state` |
+| Tampa | `Parcels/TaxParcel` FS/0 | `DOR_C IN ('0300','0800')` | — | `ACT` | `STATE` |
+| Raleigh | `Property/Property` FS/0 | `TYPE_USE_DECODE LIKE '%APT%'` | `TOTUNITS` | `YEAR_BUILT` | parsed from `ADDR2/3` |
+
+**Caveats**
+- **No unit count on Phoenix/Nashville/Tampa** — those layers carry only
+  bucketed use text (Phoenix), a use label (Nashville), or a DOR code
+  (Tampa), so follow-up rows show units as unknown and the UI's "min
+  units" filter is a no-op for them (the multifamily use filter is the
+  only multifamily gate). Charlotte/Raleigh have real per-parcel counts,
+  so "min units" applies server-side.
+- **Tampa DOR codes are 4-char**: `0300` = multi-family 10+ units,
+  `0800` = multi-family <10 units. (An earlier guess of `0003/0008`
+  matched only ~78 stray rows — wrong; the correct codes match ~4,600.)
+- **Raleigh has no dedicated owner-state field** — it's parsed out of the
+  free-text mailing lines (`ADDR3`/`ADDR2`, e.g. "DENVER CO 80237-2641")
+  by `stateFromMailingLine` in `followupCommon.ts`.
+- **Charlotte** is one row per building on multi-building complexes, so
+  `resunits` can reflect a single building; situs `address` is
+  occasionally null (falls back to `streetnumber`+`streetname`).
 
 ---
 
