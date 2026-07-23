@@ -297,6 +297,8 @@ export async function sendPostgridLetter(input: {
   from: PostGridAddress;
   deal?: DealInput;
   loi?: LoiInput;
+  landContract?: LandContractInput;
+  assignmentContract?: AssignmentContractInput;
   html?: string;
   subject?: string;
 }): Promise<{ id: string; status: string; live: boolean }> {

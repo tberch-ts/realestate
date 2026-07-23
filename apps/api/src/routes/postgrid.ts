@@ -5,8 +5,9 @@ import {
   getLetter, isConfigured, liveConfigured, testConfigured, currentMode,
   type PostGridAddress,
 } from '../providers/postgridClient.js';
-import type { DealInput, LoiInput } from '@mfa/shared';
+import type { AssignmentContractInput, DealInput, LandContractInput, LoiInput } from '@mfa/shared';
 import { renderLoiPdf } from '../loi.js';
+import { renderAssignmentContractPdf, renderLandContractPdf } from '../landContract.js';
 import { createLetterRecord, listLettersForContact, updateLetterStatus } from '../db/lettersRepo.js';
 import { getContact } from '../db/contactsRepo.js';
 import { createInteraction } from '../db/interactionsRepo.js';
@@ -273,17 +274,24 @@ postgridRouter.post('/letters/loi', async (req, res) => {
 // lookup), and nothing is written to contacts/interactions/letters here —
 // the caller is responsible for recording the result (letter id/status) in
 // its own data store after a successful response.
+//
+// Accepts any ONE of: {deal, loi} (LOI PDF), landContract (vacant-land P&S
+// PDF), assignmentContract (assignment-of-contract PDF), or html (plain
+// letter) — all three PDF renderers already return a reusable Buffer, so
+// each just feeds createLetterFromPdfBuffer the same way renderLoiPdf does.
 postgridRouter.post('/letters/inline', async (req, res) => {
   try {
     if (!isConfigured()) {
       res.status(400).json({ error: 'postgrid_not_configured', message: 'POSTGRID_API_KEY env var is not set' });
       return;
     }
-    const { to, from, deal, loi, html, subject, color, doubleSided } = (req.body ?? {}) as {
+    const { to, from, deal, loi, landContract, assignmentContract, html, subject, color, doubleSided } = (req.body ?? {}) as {
       to?: PostGridAddress;
       from?: PostGridAddress;
       deal?: DealInput;
       loi?: LoiInput;
+      landContract?: LandContractInput;
+      assignmentContract?: AssignmentContractInput;
       html?: string;
       subject?: string;
       color?: boolean;
@@ -297,8 +305,11 @@ postgridRouter.post('/letters/inline', async (req, res) => {
       res.status(400).json({ error: 'from_address_incomplete', message: 'from.addressLine1, city, provinceOrState, postalOrZip required' });
       return;
     }
-    if (!deal && !loi && !html) {
-      res.status(400).json({ error: 'content_required', message: 'Provide either {deal, loi} to render an LOI PDF, or html for a plain letter.' });
+    if (!deal && !loi && !landContract && !assignmentContract && !html) {
+      res.status(400).json({
+        error: 'content_required',
+        message: 'Provide {deal, loi} for an LOI PDF, landContract or assignmentContract for a contract PDF, or html for a plain letter.',
+      });
       return;
     }
 
@@ -309,6 +320,33 @@ postgridRouter.post('/letters/inline', async (req, res) => {
           pdf: await renderLoiPdf(deal, loi),
           pdfFilename: `LOI-${deal.address.replace(/[^a-z0-9]+/gi, '_').slice(0, 60)}.pdf`,
           description: subject ?? `LOI for ${deal.address}`,
+          color, doubleSided,
+        })
+      : landContract
+      ? await createLetterFromPdfBuffer({
+          to,
+          from,
+          pdf: await renderLandContractPdf({
+            ...landContract,
+            feasibilityDays: landContract.feasibilityDays ?? 30,
+            earnestMoney: landContract.earnestMoney ?? 0,
+            effectiveDate: landContract.effectiveDate || new Date().toISOString().slice(0, 10),
+          }),
+          pdfFilename: `land-purchase-agreement-${(landContract.address || landContract.sellerNames || 'contract').replace(/[^a-z0-9]+/gi, '_').slice(0, 60)}.pdf`,
+          description: subject ?? `Purchase agreement for ${landContract.address || landContract.sellerNames}`,
+          color, doubleSided,
+        })
+      : assignmentContract
+      ? await createLetterFromPdfBuffer({
+          to,
+          from,
+          pdf: await renderAssignmentContractPdf({
+            ...assignmentContract,
+            effectiveDate: assignmentContract.effectiveDate || new Date().toISOString().slice(0, 10),
+            originalAgreementDate: assignmentContract.originalAgreementDate || new Date().toISOString().slice(0, 10),
+          }),
+          pdfFilename: `assignment-of-contract-${(assignmentContract.address || assignmentContract.sellerNames || 'contract').replace(/[^a-z0-9]+/gi, '_').slice(0, 60)}.pdf`,
+          description: subject ?? `Assignment of contract for ${assignmentContract.address || assignmentContract.sellerNames}`,
           color, doubleSided,
         })
       : await createLetter({
