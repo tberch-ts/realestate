@@ -177,7 +177,11 @@ export default function LandLeads() {
     setResult(null)
   }
 
-  const zillowQuery = zips.trim() ? zips.split(',')[0].trim() : cfg?.label ?? ''
+  // State-qualify a typed ZIP ("27610, NC") and pin to the market center so
+  // a bare ZIP can't geocode to the wrong place (see zillowLinks.ts).
+  const firstZip = zips.trim() ? zips.split(',')[0].trim() : ''
+  const zillowQuery = firstZip ? `${firstZip}, ${cfg?.stateCode ?? ''}`.trim() : cfg?.label ?? ''
+  const zillowCenter = cfg?.center
 
   return (
     <div>
@@ -194,9 +198,9 @@ export default function LandLeads() {
 
       <div className="flex flex-wrap items-center gap-3 mb-4 text-xs">
         <span className="text-gray-500">Verify demand on Zillow:</span>
-        <ZLink href={zillowSoldLotsUrl(zillowQuery)} label="Sold lots" />
-        <ZLink href={zillowNewConstructionUrl(zillowQuery)} label="New construction" />
-        <ZLink href={zillowForSaleLotsUrl(zillowQuery)} label="Lots for sale" />
+        <ZLink href={zillowSoldLotsUrl(zillowQuery, zillowCenter)} label="Sold lots" />
+        <ZLink href={zillowNewConstructionUrl(zillowQuery, zillowCenter)} label="New construction" />
+        <ZLink href={zillowForSaleLotsUrl(zillowQuery, zillowCenter)} label="Lots for sale" />
       </div>
 
       {/* ---- filter panel ---- */}
