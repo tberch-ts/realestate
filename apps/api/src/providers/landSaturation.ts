@@ -1,53 +1,54 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { LandSaturationZoneProps, MarketKey, ProviderResult } from '@mfa/shared';
-import { fetchHotspots } from './neighborhoods.js';
-import { num } from './landCommon.js';
+import { num, str } from './landCommon.js';
 
-// Builder-activity ("saturation") choropleth for the land strategy: which
-// zones have lots of recently-SOLD lots and fresh construction — i.e.
-// where builders are actively buying. Returns a GeoJSON FeatureCollection
-// with LandSaturationZoneProps per zone — same envelope as
-// /api/hotspots/:market so the client map code is shared.
+// Builder-activity ("saturation") map for the land strategy: which ZIP
+// codes have lots of recently-SOLD vacant lots and fresh construction —
+// i.e. where builders are actively buying. Aggregated BY ZIP because
+// vacant land and new construction are overwhelmingly suburban/exurban
+// (county-wide), not inside city-neighborhood boundaries — and because
+// builder buy boxes are defined by zip, so this is the unit wholesalers
+// actually think in.
 //
-// Data flow: zone polygons come from the hotspots cache (exactly how
-// denverFollowup.ts gets polygons); parcel activity comes from ONE
-// county-wide query per signal (sold vacant lots 12mo; structures built in
-// the last 2y), binned into zones with a point-in-polygon test on parcel
-// centroids. That keeps us at ~2 upstream queries per market per day
-// instead of 2-per-zone.
+// Returns a GeoJSON FeatureCollection of POINTS (one per zip, positioned
+// at the average of that zip's sold-lot parcels), same envelope shape the
+// client map consumes. No Census / hotspots dependency — every parcel
+// carries its own zip, so a single parcel fetch + one stats query per
+// signal is all it takes.
 
-interface GeoFeature {
+interface GeoPointFeature {
   type: 'Feature';
-  geometry: { type: string; coordinates: unknown };
-  properties: Record<string, unknown>;
+  geometry: { type: 'Point'; coordinates: [number, number] };
+  properties: LandSaturationZoneProps & Record<string, unknown>;
 }
 interface GeoFC {
   type: 'FeatureCollection';
-  features: GeoFeature[];
+  features: GeoPointFeature[];
 }
 
 interface LandSatSource {
   url: string;
-  // where clause for vacant lots sold in the last 12 months
-  soldWhere: (cutoffIso: string) => string;
-  // where clause for parcels with a structure completed in the last ~2y
-  newConWhere: (minYear: number) => string;
+  zipField: string;
   priceField: string;
+  soldWhere: (cutoffIso: string) => string;   // vacant lots sold in last 12mo
+  newConWhere: (minYear: number) => string;    // structures built in last ~2y
 }
 
 const SOURCES: Partial<Record<MarketKey, LandSatSource>> = {
   raleigh: {
     url: 'https://maps.wake.gov/arcgis/rest/services/Property/Parcels/FeatureServer/0/query',
+    zipField: 'ZIPNUM',
+    priceField: 'TOTSALPRICE',
     soldWhere: (cutoff) => `LAND_CLASS = 'VAC' AND SALE_DATE >= TIMESTAMP '${cutoff} 00:00:00'`,
     newConWhere: (minYear) => `YEAR_BUILT >= ${minYear}`,
-    priceField: 'TOTSALPRICE',
   },
   tampa: {
     url: 'https://arcgis.tampagov.net/arcgis/rest/services/Parcels/TaxParcel/FeatureServer/0/query',
+    zipField: 'SITE_ZIP',
+    priceField: 'AMT',
     soldWhere: (cutoff) => `DOR_C IN ('0000','1000','4000') AND S_DATE >= TIMESTAMP '${cutoff} 00:00:00'`,
     newConWhere: (minYear) => `ACT >= ${minYear}`,
-    priceField: 'AMT',
   },
 };
 
@@ -73,15 +74,6 @@ export async function fetchLandSaturation(market: MarketKey): Promise<ProviderRe
     return { provider, status: 'ok', data: hit.data, fetchedAt: new Date(hit.ts).toISOString() };
   }
 
-  const zones = await fetchHotspots(market);
-  if (zones.status !== 'ok' || !zones.data) {
-    return {
-      provider,
-      status: 'error',
-      message: `Zone polygons unavailable (hotspots: ${zones.message ?? zones.status}) — land saturation reuses the hotspots boundary cache.`,
-    };
-  }
-
   try {
     const now = new Date();
     const cutoff = new Date(now);
@@ -89,38 +81,54 @@ export async function fetchLandSaturation(market: MarketKey): Promise<ProviderRe
     const cutoffIso = cutoff.toISOString().slice(0, 10);
     const minYear = now.getFullYear() - 2;
 
-    const [sold, newCon] = await Promise.all([
-      fetchCentroids(source.url, source.soldWhere(cutoffIso), source.priceField),
-      fetchCentroids(source.url, source.newConWhere(minYear), source.priceField),
+    const [soldParcels, newByZip] = await Promise.all([
+      fetchSoldParcels(source, source.soldWhere(cutoffIso)),
+      fetchCountByZip(source, source.newConWhere(minYear)),
     ]);
 
-    const features = (zones.data as GeoFC).features.map((zf) => {
-      const soldIn = sold.filter((p) => pointInFeature(p.lnglat, zf));
-      const newIn = newCon.filter((p) => pointInFeature(p.lnglat, zf));
-      const prices = soldIn.map((p) => p.price).filter((v): v is number => v != null && v > 0).sort((a, b) => a - b);
+    // Aggregate sold lots by zip: count, centroid (avg of parcel centroids),
+    // and true median sale price.
+    interface Agg { count: number; sx: number; sy: number; prices: number[] }
+    const byZip = new Map<string, Agg>();
+    for (const p of soldParcels) {
+      const z = p.zip;
+      if (!z) continue;
+      const a = byZip.get(z) ?? { count: 0, sx: 0, sy: 0, prices: [] };
+      a.count++;
+      a.sx += p.lng;
+      a.sy += p.lat;
+      if (p.price != null && p.price > 0) a.prices.push(p.price);
+      byZip.set(z, a);
+    }
+
+    // Build one feature per zip that has sold-lot activity (the actionable
+    // set — a zip with construction but zero recent lot sales has no
+    // inventory to farm).
+    const soldCounts = [...byZip.values()].map((a) => a.count);
+    const newCounts = [...byZip.keys()].map((z) => newByZip.get(z) ?? 0);
+
+    const features: GeoPointFeature[] = [];
+    for (const [zip, a] of byZip) {
+      const sold = a.count;
+      const newCon = newByZip.get(zip) ?? 0;
+      const s = scale(sold, soldCounts);
+      const n = scale(newCon, newCounts);
+      const prices = a.prices.sort((x, y) => x - y);
       const props: LandSaturationZoneProps & Record<string, unknown> = {
-        name: String(zf.properties.nbhd_name ?? 'Unknown'),
-        score: 0, // filled after min-max scaling below
-        soldLots12mo: soldIn.length,
-        newConstruction24mo: newIn.length,
+        name: zip,
+        score: Math.round(s * 0.6 + n * 0.4),
+        soldLots12mo: sold,
+        newConstruction24mo: newCon,
         medianLotSalePrice: prices.length ? prices[Math.floor(prices.length / 2)] : undefined,
       };
-      return {
-        type: 'Feature' as const,
-        geometry: zf.geometry,
-        properties: { ...props, _centroid: zf.properties._centroid },
-      };
-    });
-
-    // Min-max scale each signal across the market, then blend:
-    // 60% sold-lot velocity + 40% new construction.
-    const soldCounts = features.map((f) => f.properties.soldLots12mo as number);
-    const newCounts = features.map((f) => f.properties.newConstruction24mo as number);
-    for (const f of features) {
-      const s = scale(f.properties.soldLots12mo as number, soldCounts);
-      const n = scale(f.properties.newConstruction24mo as number, newCounts);
-      f.properties.score = Math.round(s * 0.6 + n * 0.4);
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [a.sx / sold, a.sy / sold] },
+        properties: props,
+      });
     }
+
+    features.sort((x, y) => y.properties.score - x.properties.score);
 
     const data: GeoFC = { type: 'FeatureCollection', features };
     memCache.set(market, { data, ts: Date.now() });
@@ -131,32 +139,31 @@ export async function fetchLandSaturation(market: MarketKey): Promise<ProviderRe
   }
 }
 
-// ---------- upstream fetch (paged; centroid-only payloads) ----------
+// ---------- upstream fetches ----------
 
-async function fetchCentroids(
-  url: string,
-  where: string,
-  priceField: string
-): Promise<Array<{ lnglat: [number, number]; price?: number }>> {
-  const out: Array<{ lnglat: [number, number]; price?: number }> = [];
+// Sold vacant lots (bounded — hundreds to low thousands) with zip +
+// centroid + price. Paged to be safe.
+async function fetchSoldParcels(
+  source: LandSatSource,
+  where: string
+): Promise<Array<{ zip?: string; lng: number; lat: number; price?: number }>> {
+  const out: Array<{ zip?: string; lng: number; lat: number; price?: number }> = [];
   const PAGE = 2000;
-  // Real volumes (verified 2026-07-22): Wake ~19k new-construction rows,
-  // Hillsborough ~12k — 10 pages covers both. Runs at most 2x/market/day.
-  const MAX_PAGES = 10;
+  const MAX_PAGES = 5;
 
   for (let page = 0; page < MAX_PAGES; page++) {
     const params = new URLSearchParams({
       where,
-      outFields: priceField,
+      outFields: `${source.zipField},${source.priceField}`,
       returnGeometry: 'true',
       returnCentroid: 'true',
       outSR: '4326',
-      geometryPrecision: '4',
+      geometryPrecision: '5',
       resultOffset: String(page * PAGE),
       resultRecordCount: String(PAGE),
       f: 'json',
     });
-    const res = await fetch(url, {
+    const res = await fetch(source.url, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: params.toString(),
@@ -172,11 +179,57 @@ async function fetchCentroids(
     for (const f of feats) {
       const c = f.centroid ?? ringsCentroid(f.geometry);
       if (!c) continue;
-      out.push({ lnglat: [c.x, c.y], price: num(f.attributes[priceField]) });
+      out.push({
+        zip: zip5(str(f.attributes[source.zipField])),
+        lng: c.x,
+        lat: c.y,
+        price: num(f.attributes[source.priceField]),
+      });
     }
     if (!body.exceededTransferLimit || feats.length < PAGE) break;
   }
   return out;
+}
+
+// Count per zip via a single groupBy-stats request (no geometry, no
+// paging — exact county-wide counts even for tens of thousands of rows).
+async function fetchCountByZip(source: LandSatSource, where: string): Promise<Map<string, number>> {
+  const params = new URLSearchParams({
+    where,
+    outStatistics: JSON.stringify([
+      { statisticType: 'count', onStatisticField: 'OBJECTID', outStatisticFieldName: 'n' },
+    ]),
+    groupByFieldsForStatistics: source.zipField,
+    f: 'json',
+  });
+  const res = await fetch(source.url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: params.toString(),
+  });
+  if (!res.ok) throw new Error(`ArcGIS HTTP ${res.status}`);
+  const body = (await res.json()) as {
+    features?: Array<{ attributes: Record<string, unknown> }>;
+    error?: { message: string };
+  };
+  if (body.error) throw new Error(body.error.message);
+
+  // Fold to 5-digit zip keys (some sources return ZIP+4) so counts line up
+  // with the sold-lot aggregation.
+  const map = new Map<string, number>();
+  for (const f of body.features ?? []) {
+    const z = zip5(str(f.attributes[source.zipField]));
+    if (!z) continue;
+    const n = num(f.attributes.n) ?? num(f.attributes.N) ?? 0;
+    map.set(z, (map.get(z) ?? 0) + n);
+  }
+  return map;
+}
+
+function zip5(z: string | undefined): string | undefined {
+  if (!z) return undefined;
+  const m = /\d{5}/.exec(z);
+  return m ? m[0] : undefined;
 }
 
 function ringsCentroid(geometry: unknown): { x: number; y: number } | null {
@@ -188,37 +241,6 @@ function ringsCentroid(geometry: unknown): { x: number; y: number } | null {
   const sx = pts.reduce((s, p) => s + p[0], 0);
   const sy = pts.reduce((s, p) => s + p[1], 0);
   return { x: sx / pts.length, y: sy / pts.length };
-}
-
-// ---------- geometry: point in GeoJSON Polygon/MultiPolygon ----------
-
-function pointInFeature(pt: [number, number], f: GeoFeature): boolean {
-  const g = f.geometry;
-  if (g.type === 'Polygon') return pointInPolygon(pt, g.coordinates as number[][][]);
-  if (g.type === 'MultiPolygon') {
-    return (g.coordinates as number[][][][]).some((poly) => pointInPolygon(pt, poly));
-  }
-  return false;
-}
-
-// Ray casting; ring[0] is the outer ring, others are holes.
-function pointInPolygon(pt: [number, number], rings: number[][][]): boolean {
-  if (!rings.length) return false;
-  if (!pointInRing(pt, rings[0])) return false;
-  for (let i = 1; i < rings.length; i++) {
-    if (pointInRing(pt, rings[i])) return false; // inside a hole
-  }
-  return true;
-}
-
-function pointInRing([x, y]: [number, number], ring: number[][]): boolean {
-  let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i];
-    const [xj, yj] = ring[j];
-    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
-  }
-  return inside;
 }
 
 function scale(v: number, all: number[]): number {
