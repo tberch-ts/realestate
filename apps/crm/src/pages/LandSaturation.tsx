@@ -148,7 +148,15 @@ export default function LandSaturation() {
   }, [zones, cfg]);
 
   const topZones = useMemo(() => [...zones].sort((a, b) => b.score - a.score).slice(0, 25), [zones]);
-  const zillowQuery = selected ? `${selected.name}` : cfg?.label ?? '';
+  // State-qualify the term ("33598, FL") and — crucially — pin the Zillow
+  // map to the selected zip's real centroid so a bare ZIP can't geocode to
+  // the wrong place. Falls back to the market center when nothing's picked.
+  const zillowQuery = selected ? `${selected.name}, ${cfg?.stateCode ?? ''}`.trim() : cfg?.label ?? '';
+  const zillowCenter = selected
+    ? ([selected.lng, selected.lat] as [number, number])
+    : cfg
+      ? cfg.center
+      : undefined;
 
   return (
     <div>
@@ -197,10 +205,10 @@ export default function LandSaturation() {
                 <Row k="Median lot sale price" v={fmtMoney(selected.medianLotSalePrice)} />
               </dl>
               <div className="mt-3 space-y-1.5 text-xs">
-                <a href={zillowSoldLotsUrl(zillowQuery)} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-blue-400 hover:text-blue-300">
+                <a href={zillowSoldLotsUrl(zillowQuery, zillowCenter)} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-blue-400 hover:text-blue-300">
                   Verify sold lots on Zillow <ExternalLink size={11} />
                 </a>
-                <a href={zillowNewConstructionUrl(zillowQuery)} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-blue-400 hover:text-blue-300">
+                <a href={zillowNewConstructionUrl(zillowQuery, zillowCenter)} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-blue-400 hover:text-blue-300">
                   Verify new construction on Zillow <ExternalLink size={11} />
                 </a>
                 <Link to={`/app/land/leads?market=${market}&zips=${selected.name}`} className="inline-block text-blue-400 hover:text-blue-300 pt-1">
