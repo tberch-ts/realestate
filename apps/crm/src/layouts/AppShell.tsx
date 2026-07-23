@@ -1,9 +1,10 @@
+import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import {
   Building2, LayoutDashboard, Kanban, Search, Users, FileText,
   MapPin, Layers, FileSearch, BookOpen,
   TrendingUp, DollarSign, GraduationCap, Settings as SettingsIcon, LogOut,
-  LandPlot, Package, Flame, FileSignature, Hammer,
+  LandPlot, Package, Flame, FileSignature, Hammer, Menu, X,
 } from 'lucide-react'
 import type { StrategyKey } from '@mfa/shared'
 import { useAuth } from '../context/AuthContext'
@@ -71,6 +72,7 @@ function Shell() {
   const { user, signOut } = useAuth()
   const { strategy } = useStrategy()
   const navigate = useNavigate()
+  const [menuOpen, setMenuOpen] = useState(false)
 
   async function handleSignOut() {
     await signOut()
@@ -81,23 +83,63 @@ function Shell() {
 
   return (
     <div className="min-h-screen flex" style={{ background: 'var(--bg-base)', color: '#f9fafb' }}>
-      <aside
-        className="w-56 shrink-0 border-r flex flex-col px-3 py-5"
+      {/* Mobile top bar */}
+      <header
+        className="lg:hidden fixed top-0 inset-x-0 z-40 flex items-center gap-3 h-14 px-4 border-b"
         style={{ borderColor: 'var(--border)', background: 'var(--bg-surface)' }}
       >
-        <div className="flex items-center gap-2 px-2 mb-4">
+        <button
+          onClick={() => setMenuOpen(true)}
+          className="p-2 -ml-2 rounded-lg text-gray-300 hover:text-white hover:bg-white/5 transition-colors"
+          aria-label="Open menu"
+        >
+          <Menu size={20} />
+        </button>
+        <div className="flex items-center gap-2">
           <Building2 size={18} className="text-blue-400" />
           <span className="font-bold tracking-tight text-sm">SmartInvestorCRM</span>
+        </div>
+      </header>
+
+      {/* Backdrop (mobile only, when menu open) */}
+      {menuOpen && (
+        <div
+          className="lg:hidden fixed inset-0 z-40 bg-black/60"
+          onClick={() => setMenuOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      <aside
+        className={`w-56 shrink-0 border-r flex flex-col px-3 py-5 z-50
+          fixed inset-y-0 left-0 transition-transform duration-200
+          lg:static lg:translate-x-0
+          ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        style={{ borderColor: 'var(--border)', background: 'var(--bg-surface)' }}
+      >
+        <div className="flex items-center justify-between gap-2 px-2 mb-4">
+          <div className="flex items-center gap-2">
+            <Building2 size={18} className="text-blue-400" />
+            <span className="font-bold tracking-tight text-sm">SmartInvestorCRM</span>
+          </div>
+          <button
+            onClick={() => setMenuOpen(false)}
+            className="lg:hidden p-1 -mr-1 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+            aria-label="Close menu"
+          >
+            <X size={18} />
+          </button>
         </div>
 
         <StrategyToggle />
 
-        <nav className="flex-1 space-y-0.5">
+        <nav className="flex-1 space-y-0.5 overflow-y-auto">
           {items.map(({ to, end, icon: Icon, label }) => (
             <NavLink
               key={to}
               to={to}
               end={end}
+              onClick={() => setMenuOpen(false)}
               className={({ isActive }) =>
                 `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
                   isActive ? 'bg-blue-600/15 text-blue-300' : 'text-gray-400 hover:text-white hover:bg-white/5'
@@ -125,7 +167,7 @@ function Shell() {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto p-8">
+      <main className="flex-1 overflow-y-auto p-8 pt-20 lg:pt-8">
         <Outlet />
       </main>
     </div>
