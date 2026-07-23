@@ -2,6 +2,14 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { LandSaturationZoneProps, MarketKey, ProviderResult } from '@mfa/shared';
 import { num, str } from './landCommon.js';
+import {
+  arcgisQuery,
+  LAND_PARCEL_SOURCES,
+  ringsCentroid,
+  scale,
+  zip5,
+  type LandParcelSource,
+} from './landArcgis.js';
 
 // Builder-activity ("saturation") map for the land strategy: which ZIP
 // codes have lots of recently-SOLD vacant lots and fresh construction —
@@ -27,30 +35,8 @@ interface GeoFC {
   features: GeoPointFeature[];
 }
 
-interface LandSatSource {
-  url: string;
-  zipField: string;
-  priceField: string;
-  soldWhere: (cutoffIso: string) => string;   // vacant lots sold in last 12mo
-  newConWhere: (minYear: number) => string;    // structures built in last ~2y
-}
-
-const SOURCES: Partial<Record<MarketKey, LandSatSource>> = {
-  raleigh: {
-    url: 'https://maps.wake.gov/arcgis/rest/services/Property/Parcels/FeatureServer/0/query',
-    zipField: 'ZIPNUM',
-    priceField: 'TOTSALPRICE',
-    soldWhere: (cutoff) => `LAND_CLASS = 'VAC' AND SALE_DATE >= TIMESTAMP '${cutoff} 00:00:00'`,
-    newConWhere: (minYear) => `YEAR_BUILT >= ${minYear}`,
-  },
-  tampa: {
-    url: 'https://arcgis.tampagov.net/arcgis/rest/services/Parcels/TaxParcel/FeatureServer/0/query',
-    zipField: 'SITE_ZIP',
-    priceField: 'AMT',
-    soldWhere: (cutoff) => `DOR_C IN ('0000','1000','4000') AND S_DATE >= TIMESTAMP '${cutoff} 00:00:00'`,
-    newConWhere: (minYear) => `ACT >= ${minYear}`,
-  },
-};
+// Endpoints + field names live in landArcgis.ts (shared with builderSearch).
+const SOURCES = LAND_PARCEL_SOURCES;
 
 const memCache = new Map<MarketKey, { data: GeoFC; ts: number }>();
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24h
@@ -144,7 +130,7 @@ export async function fetchLandSaturation(market: MarketKey): Promise<ProviderRe
 // Sold vacant lots (bounded — hundreds to low thousands) with zip +
 // centroid + price. Paged to be safe.
 async function fetchSoldParcels(
-  source: LandSatSource,
+  source: LandParcelSource,
   where: string
 ): Promise<Array<{ zip?: string; lng: number; lat: number; price?: number }>> {
   const out: Array<{ zip?: string; lng: number; lat: number; price?: number }> = [];
@@ -152,7 +138,7 @@ async function fetchSoldParcels(
   const MAX_PAGES = 5;
 
   for (let page = 0; page < MAX_PAGES; page++) {
-    const params = new URLSearchParams({
+    const feats = await arcgisQuery(source.url, {
       where,
       outFields: `${source.zipField},${source.priceField}`,
       returnGeometry: 'true',
@@ -163,19 +149,6 @@ async function fetchSoldParcels(
       resultRecordCount: String(PAGE),
       f: 'json',
     });
-    const res = await fetch(source.url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: params.toString(),
-    });
-    if (!res.ok) throw new Error(`ArcGIS HTTP ${res.status}`);
-    const body = (await res.json()) as {
-      features?: Array<{ attributes: Record<string, unknown>; geometry?: unknown; centroid?: { x: number; y: number } }>;
-      exceededTransferLimit?: boolean;
-      error?: { message: string };
-    };
-    if (body.error) throw new Error(body.error.message);
-    const feats = body.features ?? [];
     for (const f of feats) {
       const c = f.centroid ?? ringsCentroid(f.geometry);
       if (!c) continue;
@@ -186,15 +159,15 @@ async function fetchSoldParcels(
         price: num(f.attributes[source.priceField]),
       });
     }
-    if (!body.exceededTransferLimit || feats.length < PAGE) break;
+    if (feats.length < PAGE) break;
   }
   return out;
 }
 
 // Count per zip via a single groupBy-stats request (no geometry, no
 // paging — exact county-wide counts even for tens of thousands of rows).
-async function fetchCountByZip(source: LandSatSource, where: string): Promise<Map<string, number>> {
-  const params = new URLSearchParams({
+async function fetchCountByZip(source: LandParcelSource, where: string): Promise<Map<string, number>> {
+  const feats = await arcgisQuery(source.url, {
     where,
     outStatistics: JSON.stringify([
       { statisticType: 'count', onStatisticField: 'OBJECTID', outStatisticFieldName: 'n' },
@@ -202,52 +175,17 @@ async function fetchCountByZip(source: LandSatSource, where: string): Promise<Ma
     groupByFieldsForStatistics: source.zipField,
     f: 'json',
   });
-  const res = await fetch(source.url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: params.toString(),
-  });
-  if (!res.ok) throw new Error(`ArcGIS HTTP ${res.status}`);
-  const body = (await res.json()) as {
-    features?: Array<{ attributes: Record<string, unknown> }>;
-    error?: { message: string };
-  };
-  if (body.error) throw new Error(body.error.message);
 
   // Fold to 5-digit zip keys (some sources return ZIP+4) so counts line up
   // with the sold-lot aggregation.
   const map = new Map<string, number>();
-  for (const f of body.features ?? []) {
+  for (const f of feats) {
     const z = zip5(str(f.attributes[source.zipField]));
     if (!z) continue;
     const n = num(f.attributes.n) ?? num(f.attributes.N) ?? 0;
     map.set(z, (map.get(z) ?? 0) + n);
   }
   return map;
-}
-
-function zip5(z: string | undefined): string | undefined {
-  if (!z) return undefined;
-  const m = /\d{5}/.exec(z);
-  return m ? m[0] : undefined;
-}
-
-function ringsCentroid(geometry: unknown): { x: number; y: number } | null {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rings = (geometry as any)?.rings as number[][][] | undefined;
-  if (!rings?.length) return null;
-  const pts = rings.flat();
-  if (!pts.length) return null;
-  const sx = pts.reduce((s, p) => s + p[0], 0);
-  const sy = pts.reduce((s, p) => s + p[1], 0);
-  return { x: sx / pts.length, y: sy / pts.length };
-}
-
-function scale(v: number, all: number[]): number {
-  const max = Math.max(...all);
-  const min = Math.min(...all);
-  if (max === min) return max > 0 ? 100 : 0;
-  return ((v - min) / (max - min)) * 100;
 }
 
 // ---------- disk cache (same shape as neighborhoods.ts) ----------

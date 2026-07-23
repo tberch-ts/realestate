@@ -1,9 +1,18 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
 import { Package, Plus, Trash2 } from 'lucide-react'
 import { db } from '../lib/firebase'
 import { useAuth } from '../context/AuthContext'
 import type { BuilderBuyBox, BuyBoxZipRow } from '../lib/collections'
+
+// Shape handed over by "Find Builders" → Save as Buy Box (router state).
+interface PrefillBuilder {
+  builderName: string
+  market?: string
+  areaLabel?: string
+  zips?: string[]
+}
 
 // Builder buy boxes: the doc a builder hands you — closing terms, desired
 // zip codes (with the price they pay per qualifying lot), requirements,
@@ -16,11 +25,14 @@ const bd = { borderColor: 'var(--border)' }
 
 export default function BuyBoxes() {
   const { user } = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
   const [boxes, setBoxes] = useState<BuilderBuyBox[]>([])
   const [showForm, setShowForm] = useState(false)
   const [builderName, setBuilderName] = useState('')
   const [busy, setBusy] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
+  const prefillDone = useRef(false)
 
   useEffect(() => {
     if (!user) return
@@ -29,6 +41,32 @@ export default function BuyBoxes() {
       (snap) => setBoxes(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as BuilderBuyBox))
     )
   }, [user])
+
+  // Auto-create a box when arriving from "Find Builders → Save as Buy Box".
+  // Guarded so React strict-mode's double effect run can't duplicate it.
+  useEffect(() => {
+    const prefill = (location.state as { prefillBuilder?: PrefillBuilder } | null)?.prefillBuilder
+    if (!user || !prefill || prefillDone.current) return
+    prefillDone.current = true
+    ;(async () => {
+      const ref = await addDoc(collection(db, 'builder_buy_boxes'), {
+        ownerId: user.uid,
+        members: [],
+        builderName: prefill.builderName,
+        market: prefill.market,
+        areaLabel: prefill.areaLabel ?? '',
+        active: true,
+        closingTerms: [],
+        zipRows: (prefill.zips ?? []).map((zip) => ({ zip, price: 0 }) as BuyBoxZipRow),
+        requirements: [],
+        restrictions: [],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+      setOpenId(ref.id)
+      navigate('.', { replace: true, state: null }) // clear so a refresh won't re-create
+    })()
+  }, [user, location.state, navigate])
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()

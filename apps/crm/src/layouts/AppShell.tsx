@@ -3,7 +3,7 @@ import {
   Building2, LayoutDashboard, Kanban, Search, Users, FileText,
   MapPin, Layers, FileSearch, BookOpen,
   TrendingUp, DollarSign, GraduationCap, Settings as SettingsIcon, LogOut,
-  LandPlot, Package, Flame, FileSignature,
+  LandPlot, Package, Flame, FileSignature, Hammer,
 } from 'lucide-react'
 import type { StrategyKey } from '@mfa/shared'
 import { useAuth } from '../context/AuthContext'
@@ -27,6 +27,7 @@ const NAV: Array<{
   { to: '/app/filings', icon: FileSearch, label: 'Filings', strategy: 'multifamily' },
   { to: '/app/playbook', icon: BookOpen, label: 'Playbook', strategy: 'multifamily' },
   { to: '/app/land/leads', icon: LandPlot, label: 'Land Leads', strategy: 'land' },
+  { to: '/app/land/builders', icon: Hammer, label: 'Find Builders', strategy: 'land' },
   { to: '/app/land/buy-boxes', icon: Package, label: 'Builder Buy Boxes', strategy: 'land' },
   { to: '/app/land/saturation', icon: Flame, label: 'Saturation Map', strategy: 'land' },
   { to: '/app/land/contract', icon: FileSignature, label: 'Contract', strategy: 'land' },
