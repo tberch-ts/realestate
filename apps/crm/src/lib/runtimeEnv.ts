@@ -14,7 +14,16 @@ function read(): RuntimeEnv {
   // this shipped broken for every real visitor until caught in QA).
   const API_URL = (import.meta.env.VITE_API_URL as string | undefined)
     ?? (import.meta.env.DEV ? 'http://localhost:4000' : 'https://mfa-api.fly.dev');
-  const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
+  // Hardcoded fallback for the Google Maps key, same rationale as the
+  // Firebase client config in firebase.ts: it is NOT secret (it ships in
+  // every static bundle and is locked down by HTTP-referrer restrictions in
+  // Google Cloud Console, not by hiding it). Without this fallback, any
+  // docs/ rebuild made without VITE_GOOGLE_MAPS_API_KEY in the environment
+  // silently ships a bundle with no key and every map ("Missing Google Maps
+  // API key") breaks — this has now happened three times. Override via
+  // VITE_GOOGLE_MAPS_API_KEY for a different key/project.
+  const GOOGLE_MAPS_API_KEY = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined)
+    || 'AIzaSyDS_-uRGuRiqBT-RsFW_NAQcG5setOfqSE';
   return { API_URL, GOOGLE_MAPS_API_KEY };
 }
 
