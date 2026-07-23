@@ -461,11 +461,13 @@ export interface LandLeadResult {
   leads: LandLeadScored[];
 }
 
-// Per-zone properties on the land-saturation choropleth. The endpoint
-// returns a GeoJSON FeatureCollection<Polygon, LandSaturationZoneProps> —
-// same envelope as hotspots so the map rendering code is shared.
+// Per-ZIP properties on the land-saturation map. The endpoint returns a
+// GeoJSON FeatureCollection<Point, LandSaturationZoneProps> — one point per
+// ZIP code, positioned at the centroid of that zip's sold vacant lots.
+// Aggregated by zip (not city neighborhood) because vacant land and new
+// construction are county-wide, and builder buy boxes are defined by zip.
 export interface LandSaturationZoneProps {
-  name: string;
+  name: string;                 // the ZIP code
   score: number;                // 0-100 builder-activity score
   soldLots12mo: number;
   newConstruction24mo: number;

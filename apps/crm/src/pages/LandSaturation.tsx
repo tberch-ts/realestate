@@ -1,20 +1,25 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ExternalLink } from 'lucide-react';
-import type { MarketKey } from '@mfa/shared';
-import { apiFetch } from '../lib/api';
+import type { LandSaturationZoneProps, MarketKey } from '@mfa/shared';
+import { fetchLandSaturationGeoJson } from '../lib/api';
 import { loadGoogleMaps } from '../lib/googleMaps';
-import { API_URL as API_BASE, GOOGLE_MAPS_API_KEY as MAPS_KEY } from '../lib/runtimeEnv';
+import { GOOGLE_MAPS_API_KEY as MAPS_KEY } from '../lib/runtimeEnv';
 import { useMarkets, getStoredMarket, setStoredMarket } from '../lib/markets';
 import { DARK_MAP_STYLE } from '../lib/mapStyle';
 import { zillowSoldLotsUrl, zillowNewConstructionUrl } from '../lib/zillowLinks';
 import MarketSelect from '../components/MarketSelect';
 
-// Builder-activity ("saturation") choropleth: zones colored by how many
-// lots SOLD in the last 12 months + how much new construction went up in
-// the last 2 years. Hot zones = builders actively buying = where you farm
-// vacant-lot owners. Same Google Maps Data-layer pattern as Hotspots.tsx,
-// fed by GET /api/land/:market/saturation.
+// Builder-activity map, aggregated by ZIP: score-colored bubbles at each
+// zip's sold-lot centroid, plus a ranked "hot zips" list. Bubbles (not a
+// choropleth) because the unit is a zip code, and land activity is
+// county-wide, not bounded by city neighborhoods. Fed by
+// GET /api/land/:market/saturation.
+
+interface Zone extends LandSaturationZoneProps {
+  lng: number;
+  lat: number;
+}
 
 export default function LandSaturation() {
   const { markets } = useMarkets();
@@ -22,19 +27,15 @@ export default function LandSaturation() {
   const mapDiv = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mapRef = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const markersRef = useRef<any[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<{
-    name: string;
-    score: number;
-    soldLots12mo?: number;
-    newConstruction24mo?: number;
-    medianLotSalePrice?: number;
-  } | null>(null);
+  const [zones, setZones] = useState<Zone[]>([]);
+  const [selected, setSelected] = useState<Zone | null>(null);
 
   const cfg = markets.find((m) => m.key === market);
 
-  // Snap to a land-supported market once the registry loads.
   useEffect(() => {
     if (!markets.length) return;
     const cur = markets.find((m) => m.key === market);
@@ -49,88 +50,105 @@ export default function LandSaturation() {
     setMarket(next);
     setStoredMarket(next);
     setSelected(null);
+    setZones([]);
   }
 
+  // Fetch the saturation data whenever the market changes.
   useEffect(() => {
     let cancelled = false;
+    setStatus('loading');
+    setError(null);
+    setSelected(null);
+    fetchLandSaturationGeoJson(market)
+      .then((fc) => {
+        if (cancelled) return;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const rows: Zone[] = (fc.features as any[])
+          .map((f) => ({
+            ...(f.properties as LandSaturationZoneProps),
+            lng: f.geometry?.coordinates?.[0],
+            lat: f.geometry?.coordinates?.[1],
+          }))
+          .filter((z) => Number.isFinite(z.lng) && Number.isFinite(z.lat));
+        setZones(rows);
+        setStatus('ready');
+      })
+      .catch((e: Error) => {
+        if (cancelled) return;
+        setError(e.message);
+        setStatus('error');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [market]);
 
-    async function init() {
+  // Render markers whenever zones change.
+  useEffect(() => {
+    let cancelled = false;
+    async function draw() {
       if (!MAPS_KEY) {
         setError('Missing Google Maps API key. Set VITE_GOOGLE_MAPS_API_KEY.');
         setStatus('error');
         return;
       }
-      setStatus('loading');
-      setError(null);
-
       try {
         const maps = await loadGoogleMaps(MAPS_KEY);
         if (cancelled || !mapDiv.current) return;
-
-        const center = cfg ? { lat: cfg.center[1], lng: cfg.center[0] } : { lat: 27.9506, lng: -82.4572 };
         const map =
           mapRef.current ??
-          new maps.Map(mapDiv.current, {
-            zoom: 11,
-            styles: DARK_MAP_STYLE,
-            disableDefaultUI: false,
-            clickableIcons: false,
-          });
+          new maps.Map(mapDiv.current, { zoom: 10, styles: DARK_MAP_STYLE, clickableIcons: false });
         mapRef.current = map;
-        map.setCenter(center);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        map.data.forEach((f: any) => map.data.remove(f));
+        if (cfg) map.setCenter({ lat: cfg.center[1], lng: cfg.center[0] });
 
-        const res = await apiFetch(`${API_BASE}/api/land/${market}/saturation`);
-        if (!res.ok) throw new Error(`API ${res.status}`);
-        const body = await res.json();
-        if (cancelled) return;
-        if (body.status !== 'ok') {
-          setError(body.message ?? 'Land saturation not available for this market yet.');
-          setStatus('error');
-          return;
-        }
+        markersRef.current.forEach((m) => m.setMap(null));
+        markersRef.current = [];
+        const info = new maps.InfoWindow();
+        const bounds = new maps.LatLngBounds();
 
-        map.data.addGeoJson(body.data);
-        map.data.setStyle((feature: unknown) => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const f = feature as any;
-          const score = Number(f.getProperty('score') ?? 0);
-          return { fillColor: colorForScore(score), fillOpacity: 0.55, strokeColor: '#0f172a', strokeWeight: 1 };
-        });
-        map.data.addListener('mouseover', (e: unknown) => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          map.data.overrideStyle((e as any).feature, { fillOpacity: 0.8, strokeWeight: 2 });
-        });
-        map.data.addListener('mouseout', () => map.data.revertStyle());
-        map.data.addListener('click', (e: unknown) => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const f = (e as any).feature;
-          setSelected({
-            name: String(f.getProperty('name') ?? 'Unknown'),
-            score: Number(f.getProperty('score') ?? 0),
-            soldLots12mo: toNum(f.getProperty('soldLots12mo')),
-            newConstruction24mo: toNum(f.getProperty('newConstruction24mo')),
-            medianLotSalePrice: toNum(f.getProperty('medianLotSalePrice')),
+        for (const z of zones) {
+          const marker = new maps.Marker({
+            map,
+            position: { lat: z.lat, lng: z.lng },
+            icon: {
+              path: maps.SymbolPath.CIRCLE,
+              // Scale bubble by sold-lot volume; color by score.
+              scale: 8 + Math.min(22, z.soldLots12mo / 8),
+              fillColor: colorForScore(z.score),
+              fillOpacity: 0.75,
+              strokeColor: '#0f172a',
+              strokeWeight: 1,
+            },
+            label: { text: z.name, color: '#0f172a', fontSize: '10px', fontWeight: '700' },
+            title: `${z.name} — score ${z.score}`,
           });
-        });
-
-        setStatus('ready');
-      } catch (err) {
-        if (cancelled) return;
-        setError((err as Error).message);
-        setStatus('error');
+          marker.addListener('click', () => {
+            setSelected(z);
+            info.setContent(
+              `<div style="color:#111;font-size:12px"><strong>${z.name}</strong> · score ${z.score}<br/>` +
+                `${z.soldLots12mo} lots sold (12mo)<br/>${z.newConstruction24mo} new builds (24mo)</div>`
+            );
+            info.open({ map, anchor: marker });
+          });
+          markersRef.current.push(marker);
+          bounds.extend({ lat: z.lat, lng: z.lng });
+        }
+        if (zones.length > 0) map.fitBounds(bounds, 60);
+      } catch (e) {
+        if (!cancelled) {
+          setError((e as Error).message);
+          setStatus('error');
+        }
       }
     }
-
-    init();
+    draw();
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [market]);
+  }, [zones, cfg]);
 
-  const zillowQuery = selected ? `${selected.name}, ${cfg?.stateCode ?? ''}` : cfg?.label ?? '';
+  const topZones = useMemo(() => [...zones].sort((a, b) => b.score - a.score).slice(0, 25), [zones]);
+  const zillowQuery = selected ? `${selected.name}` : cfg?.label ?? '';
 
   return (
     <div>
@@ -138,8 +156,8 @@ export default function LandSaturation() {
         <div>
           <h1 className="text-2xl font-bold">Saturation Map</h1>
           <p className="text-gray-500 text-sm">
-            Builder activity by zone: sold lots (last 12 months) + new construction (last 2 years).
-            Farm vacant-lot owners where the map runs hot.
+            Builder activity by ZIP: sold lots (last 12 months) + new construction (last 2 years).
+            Bigger, redder bubbles = hotter. Farm the hot zips.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -148,6 +166,10 @@ export default function LandSaturation() {
         </div>
       </div>
 
+      {status === 'error' && error && (
+        <div className="mb-3 p-3 rounded border border-rose-500/40 bg-rose-500/10 text-rose-200 text-sm">{error}</div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
         <div
           ref={mapDiv}
@@ -155,14 +177,13 @@ export default function LandSaturation() {
           style={{ borderColor: 'var(--border)', background: 'var(--bg-card)' }}
         />
 
-        <aside className="space-y-3">
+        <aside className="space-y-3 max-h-[70vh] overflow-y-auto">
           {status === 'loading' && (
             <div className="p-4 rounded border text-gray-300 text-sm" style={{ borderColor: 'var(--border)', background: 'var(--bg-card)' }}>
-              Scoring zones by builder activity (first load queries county parcel sales — can take a
+              Scoring ZIP codes by builder activity (first load queries county parcel sales — can take a
               minute; then served from a 24h cache)…
             </div>
           )}
-          {error && <div className="p-4 rounded border border-rose-500/40 bg-rose-500/10 text-rose-200 text-sm">{error}</div>}
 
           {selected && (
             <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--border)', background: 'var(--bg-card)' }}>
@@ -175,7 +196,6 @@ export default function LandSaturation() {
                 <Row k="New construction (24 mo)" v={fmtNum(selected.newConstruction24mo)} />
                 <Row k="Median lot sale price" v={fmtMoney(selected.medianLotSalePrice)} />
               </dl>
-
               <div className="mt-3 space-y-1.5 text-xs">
                 <a href={zillowSoldLotsUrl(zillowQuery)} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-blue-400 hover:text-blue-300">
                   Verify sold lots on Zillow <ExternalLink size={11} />
@@ -183,15 +203,40 @@ export default function LandSaturation() {
                 <a href={zillowNewConstructionUrl(zillowQuery)} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-blue-400 hover:text-blue-300">
                   Verify new construction on Zillow <ExternalLink size={11} />
                 </a>
-                <Link to={`/app/land/leads?market=${market}`} className="inline-block text-blue-400 hover:text-blue-300 pt-1">
-                  Find lots to contract here →
+                <Link to={`/app/land/leads?market=${market}&zips=${selected.name}`} className="inline-block text-blue-400 hover:text-blue-300 pt-1">
+                  Find lots in {selected.name} →
                 </Link>
               </div>
             </div>
           )}
-          {!selected && status === 'ready' && (
+
+          {status === 'ready' && topZones.length > 0 && (
+            <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)', background: 'var(--bg-card)' }}>
+              <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-400 border-b" style={{ borderColor: 'var(--border)' }}>
+                Hottest ZIP codes
+              </div>
+              {topZones.map((z) => (
+                <button
+                  key={z.name}
+                  onClick={() => setSelected(z)}
+                  className={`w-full flex items-center justify-between px-3 py-2 text-sm border-t first:border-t-0 hover:bg-white/5 transition-colors ${
+                    selected?.name === z.name ? 'bg-white/5' : ''
+                  }`}
+                  style={{ borderColor: 'var(--border)' }}
+                >
+                  <span className="text-gray-200">{z.name}</span>
+                  <span className="flex items-center gap-3 text-xs text-gray-500">
+                    <span>{z.soldLots12mo} sold</span>
+                    <span className={`font-bold ${scoreTextColor(z.score)}`}>{z.score}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {status === 'ready' && topZones.length === 0 && (
             <div className="p-4 rounded border text-gray-500 text-sm" style={{ borderColor: 'var(--border)', background: 'var(--bg-card)' }}>
-              Click a zone to see builder activity + Zillow verification links.
+              No recent vacant-lot sales found for this market.
             </div>
           )}
         </aside>
@@ -234,11 +279,6 @@ function scoreTextColor(score: number): string {
   if (score >= 60) return 'text-orange-400';
   if (score >= 40) return 'text-amber-400';
   return 'text-gray-400';
-}
-
-function toNum(v: unknown): number | undefined {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : undefined;
 }
 
 function fmtNum(n?: number): string {
