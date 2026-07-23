@@ -1,7 +1,8 @@
 import { Router } from 'express';
-import type { AssignmentContractInput, LandContractInput, LandLeadFilters, MarketKey } from '@mfa/shared';
+import type { AssignmentContractInput, BuilderSearchFilters, LandContractInput, LandLeadFilters, MarketKey } from '@mfa/shared';
 import { fetchLandLeads } from '../providers/landDispatcher.js';
 import { fetchLandSaturation } from '../providers/landSaturation.js';
+import { fetchBuilders, fetchBuilderDetail } from '../providers/builderSearch.js';
 import { renderAssignmentContractPdf, renderLandContractPdf } from '../landContract.js';
 
 export const landRouter = Router();
@@ -100,6 +101,45 @@ landRouter.get('/:market/saturation', async (req, res, next) => {
       return res.status(result.status === 'not_available' ? 200 : 502).json(result);
     }
     res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/land/:market/builders — discovered, scored builders/developers
+// (business-entity owners of recent new construction + bought vacant lots).
+landRouter.get('/:market/builders', async (req, res, next) => {
+  try {
+    const market = req.params.market as MarketKey;
+    const q = req.query;
+    const filters: BuilderSearchFilters = {
+      zips: strList(q.zips),
+      minHomesBuilt: numOrUndef(q.minHomesBuilt),
+      minScore: numOrUndef(q.minScore),
+      limit: numOrUndef(q.limit),
+    };
+    const result = await fetchBuilders(market, filters);
+    if (result.status !== 'ok' || !result.data) {
+      return res.status(result.status === 'not_available' ? 200 : 502).json(result);
+    }
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/land/:market/builders/:name — one builder + lazy contact
+// enrichment (mailing address + Secretary-of-State registered agent).
+landRouter.get('/:market/builders/:name', async (req, res, next) => {
+  try {
+    const market = req.params.market as MarketKey;
+    const name = decodeURIComponent(req.params.name);
+    const result = await fetchBuilderDetail(market, name);
+    if (result.status !== 'ok' || !result.data) {
+      return res.status(result.status === 'not_available' ? 200 : 502).json(result);
+    }
     res.json(result);
   } catch (err) {
     next(err);

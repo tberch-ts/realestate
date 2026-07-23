@@ -1,5 +1,6 @@
 import type {
-  AssignmentContractInput, DealInput, FollowupResult, LandContractInput, LandLeadFilters, LandLeadResult,
+  AssignmentContractInput, BuilderDetail, BuilderSearchFilters, BuilderSearchResult,
+  DealInput, FollowupResult, LandContractInput, LandLeadFilters, LandLeadResult,
   LoiInput, MarketKey, OwnerCluster, PropertySnapshot, SmsSendInput, SmsSendResult, SosEntity,
 } from '@mfa/shared';
 import { API_URL as BASE } from './runtimeEnv';
@@ -164,6 +165,38 @@ export async function fetchLandSaturationGeoJson(market: MarketKey): Promise<{ t
   const body = await res.json();
   if (body.status !== 'ok') throw new Error(body.message ?? 'Land saturation not available for this market');
   return body.data;
+}
+
+// ---- Builder search (Builder Buy Boxes discovery) ----
+
+// Scored builders/developers discovered from county parcel data. Returns []
+// gracefully for unsupported markets (status 'not_available').
+export async function fetchBuilders(market: MarketKey, filters: BuilderSearchFilters = {}): Promise<BuilderSearchResult> {
+  const url = new URL(`${BASE}/api/land/${market}/builders`, typeof window !== 'undefined' ? window.location.origin : undefined);
+  if (filters.zips?.length) url.searchParams.set('zips', filters.zips.join(','));
+  if (filters.minHomesBuilt != null) url.searchParams.set('minHomesBuilt', String(filters.minHomesBuilt));
+  if (filters.minScore != null) url.searchParams.set('minScore', String(filters.minScore));
+  if (filters.limit) url.searchParams.set('limit', String(filters.limit));
+  const res = await apiFetch(url);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`API ${res.status}: ${text.slice(0, 120)}`);
+  }
+  const body = await res.json();
+  if (body.status === 'not_available') {
+    return { market, count: 0, filters, builders: [] };
+  }
+  if (body.status !== 'ok') throw new Error(body.message ?? 'Builder search not available for this market');
+  return body.data as BuilderSearchResult;
+}
+
+// One builder + lazy contact enrichment (mailing address + SoS agent).
+export async function fetchBuilderDetail(market: MarketKey, name: string): Promise<BuilderDetail> {
+  const res = await apiFetch(`${BASE}/api/land/${market}/builders/${encodeURIComponent(name)}`);
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  const body = await res.json();
+  if (body.status !== 'ok') throw new Error(body.message ?? 'Builder details not available');
+  return body.data as BuilderDetail;
 }
 
 export async function downloadLandContractPdf(input: LandContractInput): Promise<Blob> {

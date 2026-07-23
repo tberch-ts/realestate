@@ -474,6 +474,68 @@ export interface LandSaturationZoneProps {
   medianLotSalePrice?: number;
 }
 
+// ---------- Builder search (Builder Buy Boxes discovery) ----------
+//
+// Discover the builders/developers behind the activity the Saturation Map
+// shows: business-entity owners of recently-built homes + recently-bought
+// vacant lots, aggregated from county parcel data and scored on how much
+// they build and how hot the ZIPs they build in are.
+
+export interface BuilderSearchFilters {
+  zips?: string[];              // only builders active in these ZIPs
+  minHomesBuilt?: number;       // min new-construction parcels (last ~2y)
+  minScore?: number;            // min composite score 0-100
+  limit?: number;               // capped server-side
+}
+
+export interface BuilderParcelSample {
+  parcelId?: string;
+  address?: string;
+  zip?: string;
+  kind: 'newBuild' | 'soldLot';
+}
+
+// One discovered builder. `score` blends build volume with the Saturation
+// score of the ZIPs they operate in. Contact fields (mailing address, SoS
+// agent) are populated lazily by the detail endpoint.
+export interface BuilderRecord {
+  name: string;                 // normalized owner/entity name
+  ownerType: OwnerType;
+  isKnownBuilder: boolean;      // name matches a builder keyword (badge)
+  score: number;                // 0-100 composite
+  homesBuilt24mo: number;       // new-construction parcels owned (last ~2y)
+  lotsAcquired12mo: number;     // vacant lots bought (last 12mo)
+  zips: string[];               // ZIPs they're active in
+  avgZipSaturation: number;     // 0-100, mean Saturation score of those ZIPs
+  topZip?: string;              // their single busiest ZIP
+}
+
+export interface BuilderContact {
+  // 'ok' = SoS entity found; 'not_available' = no scraper for this state
+  // (mailing address + portal link only); 'needs_credentials'/'error' pass through.
+  sosStatus: 'ok' | 'not_available' | 'needs_credentials' | 'error';
+  mailingAddress?: string;      // owner mailing address from county parcels
+  mailingState?: string;
+  entityName?: string;          // SoS registered entity name
+  registeredAgent?: { name?: string; address?: string };
+  principalAddress?: string;
+  sosProfileUrl?: string;       // deep link to the SoS record (when found)
+  sosPortalUrl?: string;        // public search portal (when no scraper)
+  message?: string;
+}
+
+export interface BuilderDetail extends BuilderRecord {
+  contact: BuilderContact;
+  sampleParcels: BuilderParcelSample[];
+}
+
+export interface BuilderSearchResult {
+  market: MarketKey;
+  count: number;
+  filters: BuilderSearchFilters; // echo of the filters actually applied
+  builders: BuilderRecord[];
+}
+
 // ---------- SMS (Twilio) ----------
 
 export interface SmsSendInput {

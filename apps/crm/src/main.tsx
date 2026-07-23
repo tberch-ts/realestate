@@ -28,6 +28,7 @@ import CapitalRaise from './pages/CapitalRaise';
 import CapitalRaiseDetail from './pages/CapitalRaiseDetail';
 import LandLeads from './pages/LandLeads';
 import BuyBoxes from './pages/BuyBoxes';
+import BuilderSearch from './pages/BuilderSearch';
 import LandSaturation from './pages/LandSaturation';
 import LandContract from './pages/LandContract';
 import LandPlaybook from './pages/LandPlaybook';
@@ -63,6 +64,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
               <Route path="capital" element={<CapitalRaise />} />
               <Route path="capital/:id" element={<CapitalRaiseDetail />} />
               <Route path="land/leads" element={<LandLeads />} />
+              <Route path="land/builders" element={<BuilderSearch />} />
               <Route path="land/buy-boxes" element={<BuyBoxes />} />
               <Route path="land/saturation" element={<LandSaturation />} />
               <Route path="land/contract" element={<LandContract />} />
