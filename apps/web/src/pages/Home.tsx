@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import type { LoiDraft } from '@mfa/shared';
+import type { LoiDraft, MarketKey } from '@mfa/shared';
 import { apiFetch, deleteDraft, listDrafts, listFollowUps, patchFollowUp, type FollowUp } from '../lib/api';
 import { API_URL as API_BASE } from '../lib/runtimeEnv';
 import { getDevMode, toggleDevMode, onDevModeChange } from '../lib/devMode';
 
 interface RankedZone {
+  market: MarketKey;
+  marketLabel: string;
   name: string;
   score: number;
   medianIncome?: number;
@@ -25,7 +27,9 @@ export default function Home() {
   const [devMode, setDevModeState] = useState<boolean>(() => getDevMode());
 
   useEffect(() => {
-    apiFetch(`${API_BASE}/api/hotspots/denver/ranked?limit=10`)
+    // Cross-market: every neighborhood scoring 80+ across every region with
+    // Hotspots live, not just Denver. See /api/hotspots/all/ranked.
+    apiFetch(`${API_BASE}/api/hotspots/all/ranked?minScore=80&limit=60`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((body) => setZones(body.data ?? []))
       .catch((e: Error) => setZonesError(e.message))
@@ -72,7 +76,7 @@ export default function Home() {
       <div className="max-w-5xl mx-auto">
         <h1 className="text-4xl font-bold mb-2">MultiFamily Analyzer</h1>
         <p className="text-slate-400 mb-8">
-          Denver-focused deal analysis. Enter an address to pull public data, underwrite, and
+          Multi-market deal analysis. Enter an address to pull public data, underwrite, and
           generate an LOI.
         </p>
 
@@ -178,9 +182,9 @@ export default function Home() {
 
         {!zonesLoading && !zonesError && hot.length === 0 && warm.length === 0 && zones && (
           <div className="p-4 rounded border border-slate-800 bg-slate-900/40 text-slate-400 text-sm">
-            No neighborhoods currently score 80+. First load of the map below takes ~20s while we
-            pull Census data for all 78 Denver neighborhoods. Refresh once the map loads to see
-            rankings.
+            No neighborhoods currently score 80+ across our supported regions. First load of a
+            market's map takes ~20s while we pull Census data for its neighborhoods. Refresh once
+            a market's map has loaded to see its rankings here.
           </div>
         )}
 
@@ -212,7 +216,8 @@ function HotZoneStrip({
       <section className="mb-8">
         <Header title={title} subtitle={subtitle} />
         <div className="p-4 rounded border border-slate-800 bg-slate-900/40 text-slate-400 text-sm">
-          Loading Denver neighborhood scores… (first load ~20s while Census data is fetched)
+          Loading neighborhood scores across all supported markets… (first load ~20s per market
+          while Census data is fetched)
         </div>
       </section>
     );
@@ -238,13 +243,16 @@ function HotZoneStrip({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {zones.map((z) => (
           <Link
-            key={z.name}
-            to={`/hotspots?focus=${encodeURIComponent(z.name)}`}
+            key={`${z.market}-${z.name}`}
+            to={`/hotspots?market=${encodeURIComponent(z.market)}&focus=${encodeURIComponent(z.name)}`}
             className={`block p-4 rounded-xl border ${ring} bg-slate-900/40 hover:bg-slate-900/80 transition`}
           >
             <div className="flex items-start justify-between mb-2">
-              <div className="font-semibold text-slate-100 text-sm">{z.name}</div>
-              <div className={`text-2xl font-bold ${scoreClr}`}>{z.score}</div>
+              <div className="min-w-0">
+                <div className="font-semibold text-slate-100 text-sm truncate">{z.name}</div>
+                <div className="text-xs text-slate-500 truncate">{z.marketLabel}</div>
+              </div>
+              <div className={`text-2xl font-bold shrink-0 ${scoreClr}`}>{z.score}</div>
             </div>
             <dl className="text-xs text-slate-400 space-y-0.5">
               {z.medianIncome != null && (
