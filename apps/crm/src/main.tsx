@@ -4,6 +4,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import './index.css';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import AdminRoute from './components/AdminRoute';
 import ComingSoon from './components/ComingSoon';
 import AppShell from './layouts/AppShell';
 import Landing from './pages/Landing';
@@ -34,6 +35,10 @@ import LandContract from './pages/LandContract';
 import LandPlaybook from './pages/LandPlaybook';
 import Settings from './pages/Settings';
 import BillingSettings from './pages/BillingSettings';
+import AdminLayout from './pages/admin/AdminLayout';
+import AdminStats from './pages/admin/AdminStats';
+import AdminUsers from './pages/admin/AdminUsers';
+import AdminMarketSignals from './pages/admin/AdminMarketSignals';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
@@ -72,6 +77,13 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
               <Route path="learn" element={<ComingSoon feature="Learn" />} />
               <Route path="settings" element={<Settings />} />
               <Route path="settings/billing" element={<BillingSettings />} />
+              <Route path="admin" element={<AdminRoute />}>
+                <Route element={<AdminLayout />}>
+                  <Route index element={<AdminStats />} />
+                  <Route path="users" element={<AdminUsers />} />
+                  <Route path="market-signals" element={<AdminMarketSignals />} />
+                </Route>
+              </Route>
             </Route>
           </Route>
         </Routes>

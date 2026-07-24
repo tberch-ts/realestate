@@ -28,7 +28,10 @@ billingRouter.use(requireFirebaseUser);
 // the frontend sends a plan key ('pro'/'team'), never a raw Stripe price ID.
 // Keeps the set of purchasable prices to an explicit allowlist instead of
 // trusting whatever price ID a client happens to send.
-const PLAN_PRICE_IDS: Record<string, string | undefined> = {
+// Exported for routes/admin.ts, which maps a billing_accounts.price_id back
+// to a plan key for the Users list / stats dashboard — single source of
+// truth instead of a second copy of this env-var mapping.
+export const PLAN_PRICE_IDS: Record<string, string | undefined> = {
   pro: process.env.STRIPE_PRICE_PRO,
   team: process.env.STRIPE_PRICE_TEAM,
 };

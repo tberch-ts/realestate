@@ -27,6 +27,7 @@ import { billingRouter } from './routes/billing.js';
 import { invoicesRouter } from './routes/invoices.js';
 import { terminalRouter } from './routes/terminal.js';
 import { connectRouter } from './routes/connect.js';
+import { adminRouter } from './routes/admin.js';
 import { warmHotspots } from './providers/neighborhoods.js';
 import { warmDenverPortfolio } from './providers/denverPortfolio.js';
 import { supportedNeighborhoodMarkets } from './config/markets.js';
@@ -129,6 +130,7 @@ app.use('/api/billing', billingRouter);
 app.use('/api/invoices', invoicesRouter);
 app.use('/api/terminal', terminalRouter);
 app.use('/api/connect', connectRouter);
+app.use('/api/admin', adminRouter);
 
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('[api] unhandled error:', err);

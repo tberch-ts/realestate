@@ -346,3 +346,63 @@ export async function sendPostgridLetter(input: {
   }
   return res.json();
 }
+
+// ---- Admin panel (backend-only lookups — Firebase Auth listing + Postgres
+// billing_accounts + cross-tenant Firestore counts, none of which the
+// client SDK can do under firestore.rules). Every call here 403s server-side
+// (requireAdmin) unless the signed-in user carries the `admin` custom claim. ----
+
+export interface AdminUserRow {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  disabled: boolean;
+  admin: boolean;
+  createdAt: string;
+  lastSignInAt: string | null;
+  plan: string;
+  subscriptionStatus: string | null;
+  currentPeriodEnd: string | null;
+}
+
+export async function fetchAdminUsers(pageToken?: string): Promise<{ users: AdminUserRow[]; nextPageToken?: string }> {
+  const url = new URL(`${BASE}/api/admin/users`, typeof window !== 'undefined' ? window.location.origin : undefined);
+  if (pageToken) url.searchParams.set('pageToken', pageToken);
+  const res = await apiFetch(url);
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.message ?? `API ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function setAdminClaim(uid: string, admin: boolean): Promise<{ uid: string; admin: boolean }> {
+  const res = await apiFetch(`${BASE}/api/admin/users/${encodeURIComponent(uid)}/admin-claim`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ admin }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.message ?? `API ${res.status}`);
+  }
+  return res.json();
+}
+
+export interface AdminStats {
+  userCount: number;
+  usersTruncated: boolean;
+  signupsByMonth: { month: string; count: number }[];
+  collections: { deals: number; contacts: number; lois: number; capitalRaises: number; builderBuyBoxes: number };
+  planBreakdown: { plan: string; count: number }[];
+  mrrEstimate: number;
+}
+
+export async function fetchAdminStats(): Promise<AdminStats> {
+  const res = await apiFetch(`${BASE}/api/admin/stats`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.message ?? `API ${res.status}`);
+  }
+  return res.json();
+}
