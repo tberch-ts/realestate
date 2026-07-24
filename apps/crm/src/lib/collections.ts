@@ -271,3 +271,19 @@ export interface Loi {
   createdAt?: unknown
   updatedAt?: unknown
 }
+
+// Stored at market_signals/{msaSlug} — shared reference data readable by any
+// signed-in user, writable only via the `admin` custom claim (see
+// firestore.rules). Managed through the Admin panel's Market Signals tab
+// (apps/crm/src/pages/admin/AdminMarketSignals.tsx), which writes directly
+// via the client SDK using the signed-in admin's own credentials — no
+// backend route needed since firestore.rules already enforces the
+// admin-only write.
+export interface MarketSignal {
+  id: string // msaSlug — e.g. "denver-aurora-lakewood-co", set at creation, immutable after
+  label: string // display name, e.g. "Denver-Aurora-Lakewood, CO"
+  headline?: string // short investor-facing insight shown alongside the metro
+  investabilityScore?: number
+  notes?: string
+  updatedAt?: unknown
+}

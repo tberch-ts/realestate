@@ -31,6 +31,21 @@ export async function getBillingAccountByUid(firebaseUid: string): Promise<Billi
   return res.rows[0] ?? null;
 }
 
+// Admin panel use: batch lookup for a page of Firebase Auth users, and a
+// full dump for stats aggregation (plan breakdown, MRR estimate).
+export async function getBillingAccountsByUids(firebaseUids: string[]): Promise<BillingAccount[]> {
+  if (firebaseUids.length === 0) return [];
+  const res = await pool.query<BillingAccount>(`SELECT * FROM billing_accounts WHERE firebase_uid = ANY($1::text[])`, [
+    firebaseUids,
+  ]);
+  return res.rows;
+}
+
+export async function listAllBillingAccounts(): Promise<BillingAccount[]> {
+  const res = await pool.query<BillingAccount>(`SELECT * FROM billing_accounts`);
+  return res.rows;
+}
+
 export async function getBillingAccountByCustomerId(stripeCustomerId: string): Promise<BillingAccount | null> {
   const res = await pool.query<BillingAccount>(`SELECT * FROM billing_accounts WHERE stripe_customer_id = $1`, [
     stripeCustomerId,

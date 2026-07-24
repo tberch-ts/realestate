@@ -4,19 +4,21 @@ import {
   Building2, LayoutDashboard, Kanban, Search, Users, FileText,
   MapPin, Layers, FileSearch, BookOpen,
   TrendingUp, DollarSign, GraduationCap, Settings as SettingsIcon, LogOut,
-  LandPlot, Package, Flame, FileSignature, Hammer, Menu, X,
+  LandPlot, Package, Flame, FileSignature, Hammer, Menu, X, ShieldCheck,
 } from 'lucide-react'
 import type { StrategyKey } from '@mfa/shared'
 import { useAuth } from '../context/AuthContext'
 import { StrategyProvider, useStrategy, STRATEGY_LABELS } from '../lib/strategy'
 
 // `strategy` gates an item to one strategy's nav; undefined = shown in both.
+// `adminOnly` additionally requires the `admin` custom claim (see AuthContext).
 const NAV: Array<{
   to: string
   end?: boolean
   icon: typeof LayoutDashboard
   label: string
   strategy?: StrategyKey
+  adminOnly?: boolean
 }> = [
   { to: '/app', end: true, icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/app/deals', icon: Kanban, label: 'Deal Board' },
@@ -36,6 +38,7 @@ const NAV: Array<{
   { to: '/app/market', icon: TrendingUp, label: 'Market Intel' },
   { to: '/app/capital', icon: DollarSign, label: 'Capital Raise', strategy: 'multifamily' },
   { to: '/app/learn', icon: GraduationCap, label: 'Learn', strategy: 'multifamily' },
+  { to: '/app/admin', icon: ShieldCheck, label: 'Admin', adminOnly: true },
   { to: '/app/settings', icon: SettingsIcon, label: 'Settings' },
 ]
 
@@ -69,7 +72,7 @@ function StrategyToggle() {
 }
 
 function Shell() {
-  const { user, signOut } = useAuth()
+  const { user, isAdmin, signOut } = useAuth()
   const { strategy } = useStrategy()
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -79,7 +82,7 @@ function Shell() {
     navigate('/', { replace: true })
   }
 
-  const items = NAV.filter((i) => !i.strategy || i.strategy === strategy)
+  const items = NAV.filter((i) => (!i.strategy || i.strategy === strategy) && (!i.adminOnly || isAdmin))
 
   return (
     <div className="min-h-screen flex" style={{ background: 'var(--bg-base)', color: '#f9fafb' }}>

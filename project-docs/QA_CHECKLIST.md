@@ -119,6 +119,40 @@ this PR, never verified live.
 - [ ] Detail page edits (status, amounts, close date, notes) save and reflect immediately
 - [ ] Delete removes the raise and returns to the list
 
+## Admin panel (`/app/admin`, `/app/admin/users`, `/app/admin/market-signals`) — new
+
+Requires the `admin` Firebase custom claim, which nothing has by default — grant
+the first admin with `npm run grant-admin -- <email>` from `apps/api` (needs
+`FIREBASE_SERVICE_ACCOUNT_JSON` in the shell env). Granting/revoking also
+revokes that user's existing refresh tokens, so their current session is
+invalidated immediately — they'll need to sign in again for the claim change
+to show up client-side (not a soft "wait ~1hr", it's forced right away).
+
+- [ ] Signed in as a non-admin: "Admin" does not appear in the sidebar, and
+      navigating to `/app/admin` directly redirects to `/app`
+- [ ] Signed in as an admin: "Admin" appears in the sidebar; Overview tab loads
+      stat tiles (users, MRR estimate, deals/contacts/LOIs/capital raises/buy
+      boxes across ALL users, not just the admin's own) without erroring
+- [ ] Plan breakdown and signups-by-month sections render (or show empty-state
+      copy if there's no data yet)
+- [ ] Users tab lists every signed-up user with plan/subscription status;
+      "Load more" works if there are enough users to paginate
+- [ ] Granting admin to another user's row succeeds after confirming the
+      prompt; that user's own "Admin" nav item appears after their next sign-in
+- [ ] Revoking another admin's access succeeds after confirming; the "Admin"
+      toggle button on your OWN row is disabled and can't be clicked
+- [ ] **Revocation actually takes effect immediately**: revoke a second
+      browser/incognito session's admin access while that session is still
+      open — its very next `/api/admin/*` call (e.g. switching tabs) should
+      401, not silently keep working until the token naturally expires
+- [ ] Market Signals tab: create a signal (label + auto-slugged id), edit its
+      fields inline (blur-to-save, same pattern as Builder Buy Boxes), delete
+      it — confirm each Firestore write actually lands (check the Firebase
+      console or re-load the page)
+- [ ] As a NON-admin, confirm `market_signals` is still readable (e.g. via
+      browser devtools console: `getDocs(collection(db,'market_signals'))`
+      should succeed) but a direct client write is rejected by firestore.rules
+
 ## Cross-cutting / security
 
 - [ ] Sign in as two different users, confirm neither can see the other's deals/contacts/LOIs (Firestore rules isolation, not just a UI hide)

@@ -37,7 +37,7 @@ Optional:
 ```
 AUTH_MODE                    = both       # default; switch to 'firebase' once verified
 CORS_ALLOWED_ORIGINS         = (omit — defaults already cover talkstud.io)
-FIREBASE_ADMINS_ONLY         = false      # set 'true' to require isAdmin custom claim
+FIREBASE_ADMINS_ONLY         = false      # set 'true' to require the `admin` custom claim
 ```
 
 ### Service account key
@@ -129,6 +129,6 @@ At that point re.talkstud.io's nginx basic-auth gate becomes the only friction l
 
 ## Pass 2 follow-ups
 
-- Sync mechanism: a Firestore trigger (Cloud Function) that mirrors `users/{uid}.isAdmin` → custom claim `isAdmin: true`, so the API can check `auth.token.isAdmin` directly without a second admin list.
+- ~~Sync mechanism: a Firestore trigger (Cloud Function) that mirrors `users/{uid}.isAdmin` → custom claim `isAdmin: true`~~ — superseded. The `admin` custom claim (note: `admin`, not `isAdmin` — matches `firestore.rules`' `isAdmin()` helper, which checks `request.auth.token.admin`) is now granted directly via `apps/api/src/routes/admin.ts` (the Admin panel's Users tab) or, for the first admin, `apps/api/scripts/grantAdmin.ts`. No Firestore trigger needed.
 - Per-tier route gating: `/api/crm/*` requires `isCrmTier` claim, etc.
 - Sentry / error tracking around 401s to catch token expiration loops.

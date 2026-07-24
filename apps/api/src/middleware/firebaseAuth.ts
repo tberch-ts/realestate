@@ -21,9 +21,12 @@
 // Optional env:
 //   FIREBASE_AUTH_BYPASS=true      — for local dev without a service account
 //                                    key. Treats every request as anon.
-//   FIREBASE_ADMINS_ONLY=true      — restrict access to users where
-//                                    isAdmin custom claim is true. Default
-//                                    is "any signed-in Firebase user".
+//   FIREBASE_ADMINS_ONLY=true      — restrict access to users where the
+//                                    `admin` custom claim is true. Default
+//                                    is "any signed-in Firebase user". See
+//                                    routes/admin.ts for how the claim is
+//                                    granted (Admin panel Users tab, or the
+//                                    scripts/grantAdmin.ts bootstrap script).
 //
 // /health stays unauthed for DO probes.
 
@@ -125,12 +128,18 @@ export async function firebaseAuth(req: Request, res: Response, next: NextFuncti
   }
 
   try {
-    const decoded = await getAuth(app).verifyIdToken(idToken);
+    // checkRevoked=true so an admin-claim change (routes/admin.ts calls
+    // revokeRefreshTokens on every grant/revoke) invalidates any ID token
+    // already issued to that user immediately, instead of leaving it valid
+    // for the rest of its ~1hr natural lifetime. Without this, a just-
+    // revoked admin could keep using their old token to call admin routes
+    // (including re-granting themselves) until it expired on its own.
+    const decoded = await getAuth(app).verifyIdToken(idToken, true);
 
     // Optional admin-only gate. By default any signed-in Firebase user is
     // admitted (the frontend handles tier-based feature gating). Flip
     // FIREBASE_ADMINS_ONLY=true to restrict the whole API to admins.
-    if (process.env.FIREBASE_ADMINS_ONLY === 'true' && decoded.isAdmin !== true) {
+    if (process.env.FIREBASE_ADMINS_ONLY === 'true' && decoded.admin !== true) {
       res.status(403).json({ error: 'forbidden', message: 'Admin access required' });
       return;
     }

@@ -26,7 +26,29 @@ Built in `apps/crm` on branch `claude/market-intel-capital-raise-9d68e9`, not ye
       emulator or test login, so someone with real sign-in access needs to
       click through both features once deployed.
 
-## 2. Deploy / infra follow-ups
+## 2. Admin panel (new — Users/Subscriptions, Market Signals, Platform Stats)
+
+Built on branch `claude/smart-investor-admin-panel-dc4368`, not yet committed:
+
+- [ ] Review and commit: `apps/api/src/{middleware/requireAdmin.ts,routes/admin.ts}`,
+      `apps/api/scripts/grantAdmin.ts`, edits to `firebaseAuth.ts` (fixed the
+      `isAdmin`/`admin` custom-claim key mismatch between it and
+      `firestore.rules`), `billingAccountsRepo.ts`, `billing.ts`, `index.ts`;
+      `apps/crm/src/pages/admin/*`, `AdminRoute.tsx`, edits to `AuthContext.tsx`,
+      `AppShell.tsx`, `main.tsx`, `collections.ts`, `lib/api.ts`
+- [ ] **Bootstrap the first admin post-deploy** — nothing has the `admin`
+      custom claim by default. From `apps/api`, with
+      `FIREBASE_SERVICE_ACCOUNT_JSON` set in the shell:
+      `npm run grant-admin -- you@example.com`. After that, grant everyone
+      else through the Admin panel's Users tab instead of the script.
+- [ ] No firestore.rules/indexes changes needed — the `market_signals`
+      admin-write rule this panel relies on was already live in prod before
+      this PR (see `firestore.rules`'s `isAdmin()`), just unused until now.
+- [ ] Live QA per the new "Admin panel" section in `project-docs/QA_CHECKLIST.md`
+      — same caveat as everything else in this file, this dev sandbox has no
+      real sign-in to test against.
+
+## 3. Deploy / infra follow-ups
 
 - [ ] **Reconcile `functions/index.js`** (Firebase Functions wrapping the Express
       API) vs. `mfa-api.fly.dev` (Fly.io, what `runtimeEnv.ts` actually points
@@ -38,7 +60,7 @@ Built in `apps/crm` on branch `claude/market-intel-capital-raise-9d68e9`, not ye
       links and the `fly secrets set` command to inject once obtained. Unlocks
       Fair Market Rents on every property page + raises BLS from 25/day to 500/day.
 
-## 3. Feature backlog (from `project-docs/ROADMAP.md`)
+## 4. Feature backlog (from `project-docs/ROADMAP.md`)
 
 - [ ] **Phase 9d — geographic expansion beyond Denver** (deferred 2026-04-18).
       Pick Path A (RentCast paid, ~2hrs/$49mo), B (per-city free, 3-5hrs/city),
@@ -56,7 +78,7 @@ Built in `apps/crm` on branch `claude/market-intel-capital-raise-9d68e9`, not ye
 - [ ] Property page: surface matched CRM contacts inline when the owner is
       already in the user's contacts.
 
-## 4. Known gaps (from `QA_CHECKLIST.md`)
+## 5. Known gaps (from `QA_CHECKLIST.md`)
 
 - [ ] `Learn` and parts of `Settings/Billing` are still `ComingSoon` placeholders.
 - [ ] No invite UI for adding a `members` teammate to a deal/LOI/capital raise —
@@ -65,7 +87,7 @@ Built in `apps/crm` on branch `claude/market-intel-capital-raise-9d68e9`, not ye
 - [ ] No standalone underwriting calculator in `apps/crm` (existed as `apps/web`'s
       `/deal` page) — Playbook's CTA for it currently points at the Deal Board instead.
 
-## 5. Stale docs worth reconciling
+## 6. Stale docs worth reconciling
 
 - [ ] `project-docs/ACQUISITION_CRITERIA.md` marks job growth (BLS), crime (FBI
       UCR), and landlord-friendliness as "not yet implemented — add in next
